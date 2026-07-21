@@ -1,0 +1,10 @@
+(executable
+ (name app)
+ (modes js)
+ (libraries brr stringart))
+
+; index.html is a plain source file; depending on it here makes dune copy it
+; next to app.bc.js so the directory can be served as-is.
+(alias
+ (name default)
+ (deps index.html app.bc.js))
