@@ -1,0 +1,11 @@
+let () =
+  Alcotest.run "stringart"
+    [
+      Test_image.suite;
+      Test_geometry.suite;
+      Test_raster.suite;
+      Test_palette.suite;
+      Test_solver.suite;
+      Test_render.suite;
+      Test_export.suite;
+    ]
