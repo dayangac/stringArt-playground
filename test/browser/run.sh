@@ -12,7 +12,7 @@ dune build @default
 WORK=$(mktemp -d)
 PROFILE=$(mktemp -d)
 PORT=${PORT:-8973}
-trap 'kill $CHROME_PID 2>/dev/null; rm -rf "$WORK" "$PROFILE"' EXIT
+trap 'kill $CHROME_PID 2>/dev/null; rm -rf "$WORK" "$PROFILE" 2>/dev/null; true' EXIT
 
 cp _build/default/web/app.bc.js "$WORK/"
 cp test/browser/driver.js "$WORK/"
