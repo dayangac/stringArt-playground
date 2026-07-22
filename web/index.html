@@ -69,6 +69,8 @@
     Winds a photograph as one continuous thread between pins on a circular frame.
     Greedy chord selection — the unoptimised baseline: it never reconsiders a chord
     it has placed, and it does not yet account for how much thread each one costs.
+    Coloured thread needs a lot more chords than black to stop looking pale: each
+    colour only blocks part of the spectrum.
   </p>
 
   <div class="layout">
@@ -90,11 +92,11 @@
       </div>
       <div class="field">
         <label for="lines">Chords <b id="out-lines"></b></label>
-        <input type="range" id="lines" min="100" max="4000" step="50" value="1500">
+        <input type="range" id="lines" min="100" max="8000" step="100" value="1500">
       </div>
       <div class="field">
         <label for="opacity">Thread darkness <b id="out-opacity"></b></label>
-        <input type="range" id="opacity" min="0.05" max="0.4" step="0.01" value="0.18">
+        <input type="range" id="opacity" min="0.05" max="0.5" step="0.01" value="0.18">
       </div>
       <div class="field">
         <label for="gap">Minimum pin span <b id="out-gap"></b></label>
