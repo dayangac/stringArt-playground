@@ -63,17 +63,25 @@ Two consequences worth knowing:
 
 ### The solver
 
-At each step it looks at every chord leaving the current pin, scores it by the
-exact error reduction it would produce, takes the best, subtracts what it
-deposits, and moves on. It stops when no chord improves the picture. One
-traversal per chord scores all threads at once.
+At each step it looks at every chord leaving the current pin, admits the ones
+that would actually reduce the error, and among those takes the one whose
+thread colour best lines up with the residual — the standard matching-pursuit
+criterion, `<r,d>²/‖d‖²`. One traversal per chord scores all threads at once.
+
+The two halves of that rule do different jobs. Ranking on raw error reduction
+instead would pick whichever thread has the largest density vector — always
+black, since `‖d‖ = √3` against roughly 1 for the others — and the picture comes
+out grey no matter what colour the subject is. Keeping the error reduction as
+the *admission* test is what lets the solver stop on its own when no chord is
+worth winding.
 
 Its known, deliberate limits:
 
 - myopic — it never removes a chord it has already placed;
 - blind to cost — a chord twice as long counts the same as a short one;
-- it spends the achromatic part of the residual first, so black leads and hue
-  only appears once black stops paying (~430 chords on a solid colour target).
+- colour needs thread. A saturated subject wants far more chords than a
+  grayscale one, because each thread only blocks one part of the spectrum;
+  under-run, it comes out pale.
 
 ## Deliberately not done yet
 
