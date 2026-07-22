@@ -31,6 +31,26 @@ let disc ~w ~h =
   done;
   img
 
+(* Saturated field with a dark blob: mixed content, where a solver that
+   reaches for black too eagerly greys out the colour. *)
+let orange_with_dark_blob ~w ~h =
+  let img = Image.create ~v:1. ~w ~h () in
+  let cx = float_of_int w /. 2. and cy = float_of_int h /. 2. in
+  let r = float_of_int (min w h) /. 6. in
+  for y = 0 to h - 1 do
+    for x = 0 to w - 1 do
+      let dx = float_of_int x -. cx and dy = float_of_int y -. cy in
+      let c =
+        if (dx *. dx) +. (dy *. dy) <= r *. r then (0.08, 0.06, 0.06) else (0.86, 0.42, 0.16)
+      in
+      let r', g', b' = c in
+      Image.set img ~x ~y ~ch:0 (Image.srgb_to_linear r');
+      Image.set img ~x ~y ~ch:1 (Image.srgb_to_linear g');
+      Image.set img ~x ~y ~ch:2 (Image.srgb_to_linear b')
+    done
+  done;
+  img
+
 let solid ~w ~h (r, g, b) =
   let img = Image.create ~w ~h () in
   for y = 0 to h - 1 do
