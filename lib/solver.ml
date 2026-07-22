@@ -70,7 +70,7 @@ let solve ?(config = default_config) ?(palette = Palette.grayscale) img =
      while !count < config.max_lines do
        (* Score every chord out of the current pin. One traversal per chord
           yields the residual projection for all threads at once. *)
-       let best = ref (-1) and best_k = ref (-1) and best_gain = ref 0. in
+       let best = ref (-1) and best_k = ref (-1) and best_score = ref 0. in
        for j = 0 to config.pins - 1 do
          if Geometry.pin_gap frame !cur j >= max 1 config.min_gap then begin
            let s0 = ref 0. and s1 = ref 0. and s2 = ref 0. and q = ref 0. in
@@ -85,9 +85,16 @@ let solve ?(config = default_config) ?(palette = Palette.grayscale) img =
                let t = palette.(k) in
                let d = t.Palette.density in
                let dot = (!s0 *. d.(0)) +. (!s1 *. d.(1)) +. (!s2 *. d.(2)) in
-               let gain = (2. *. alpha *. dot) -. (alpha *. alpha *. t.Palette.dnorm2 *. !q) in
-               if gain > !best_gain then begin
-                 best_gain := gain;
+               (* Admit a chord only if winding it actually reduces the error,
+                  then rank by how well its colour lines up with the residual.
+                  Ranking on the raw error reduction instead would pick whichever
+                  thread has the largest density vector - always black - rather
+                  than the one pointing the right way. *)
+               let reduces = (2. *. alpha *. dot) -. (alpha *. alpha *. t.Palette.dnorm2 *. !q) in
+               let denom = t.Palette.dnorm2 *. !q in
+               let score = if denom > 0. then dot *. dot /. denom else 0. in
+               if dot > 0. && reduces > 0. && score > !best_score then begin
+                 best_score := score;
                  best := j;
                  best_k := k
                end
