@@ -151,9 +151,10 @@ let grayscale_uses_only_black () =
     (fun (s : Solver.step) -> Alcotest.(check int) "black thread" 0 s.Solver.thread)
     r.Solver.steps
 
-(* Greedy spends the achromatic part of the residual first, so black leads and
-   hue only appears once black stops paying. On a red target that means
-   magenta and yellow, and never cyan. *)
+(* Chords are ranked by how well the thread's colour lines up with the
+   residual, so a red target is wound in magenta and yellow. Ranking on raw
+   error reduction instead makes black win almost every step and the picture
+   comes out grey. *)
 let colour_picks_the_subtractive_complement () =
   let img = solid ~w:64 ~h:64 (0.9, 0.05, 0.05) in
   let r = solve ~palette:Palette.cmyk ~config:(cfg ~pins:64 ~max_lines:900 ()) img in
@@ -162,13 +163,38 @@ let colour_picks_the_subtractive_complement () =
       r.Solver.steps
   in
   let cyan = count 0 and magenta = count 1 and yellow = count 2 and black = count 3 in
-  Alcotest.(check int) "cyan would lighten nothing" 0 cyan;
-  Alcotest.(check bool) "magenta used" true (magenta > 0);
-  Alcotest.(check bool) "yellow used" true (yellow > 0);
-  Alcotest.(check bool)
-    (Printf.sprintf "black %d leads the run (c=%d m=%d y=%d)" black cyan magenta yellow)
-    true
-    (r.Solver.steps.(0).Solver.thread = 3)
+  let where = Printf.sprintf "(c=%d m=%d y=%d k=%d)" cyan magenta yellow black in
+  Alcotest.(check int) "cyan only blocks red, which the target keeps" 0 cyan;
+  Alcotest.(check bool) ("magenta used " ^ where) true (magenta > 0);
+  Alcotest.(check bool) ("yellow used " ^ where) true (yellow > 0);
+  Alcotest.(check bool) ("hue carries the picture, not black " ^ where) true
+    (magenta + yellow > 4 * black);
+  Alcotest.(check bool) "a hue-aligned thread leads" true (r.Solver.steps.(0).Solver.thread <> 3)
+
+(* The regression guard for grey colour output: what comes off the frame has to
+   keep the target's channel ordering, not average out to neutral. *)
+let colour_render_keeps_the_target_hue () =
+  let size = 128 in
+  let img = orange_with_dark_blob ~w:size ~h:size in
+  let config = cfg ~pins:128 ~max_lines:700 () in
+  let r = Solver.solve ~config ~palette:Palette.cmyk img in
+  let out =
+    Render.image ~pins:128 ~palette:Palette.cmyk ~opacity:config.Solver.opacity ~w:size ~h:size
+      r.Solver.steps
+  in
+  let mean ch =
+    let acc = ref 0. in
+    for y = 0 to size - 1 do
+      for x = 0 to size - 1 do
+        acc := !acc +. Image.get out ~x ~y ~ch
+      done
+    done;
+    !acc /. float_of_int (size * size)
+  in
+  let red = mean 0 and green = mean 1 and blue = mean 2 in
+  let seen = Printf.sprintf "(%.3f %.3f %.3f)" red green blue in
+  Alcotest.(check bool) ("orange stays ordered r>g>b " ^ seen) true (red > green && green > blue);
+  Alcotest.(check bool) ("and does not wash out to grey " ^ seen) true (red -. blue > 0.08)
 
 let colour_beats_grayscale_on_a_colour_target () =
   let img = solid ~w:64 ~h:64 (0.9, 0.05, 0.05) in
@@ -222,6 +248,8 @@ let suite =
       Alcotest.test_case "grayscale uses only black" `Quick grayscale_uses_only_black;
       Alcotest.test_case "colour picks the subtractive complement" `Quick
         colour_picks_the_subtractive_complement;
+      Alcotest.test_case "colour render keeps the target hue" `Quick
+        colour_render_keeps_the_target_hue;
       Alcotest.test_case "colour beats grayscale on a colour target" `Quick
         colour_beats_grayscale_on_a_colour_target;
     ]
