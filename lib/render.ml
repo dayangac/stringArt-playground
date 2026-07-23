@@ -1,29 +1,29 @@
-(* Turn a wound sequence back into a picture, using the same subtractive model
-   the solver assumes: densities add, reflectance is exp(-density).
+(* Turn a wound sequence back into a picture, replaying the solver's model:
+   start from the bare board and let each crossing pull the pixel a fraction of
+   the way towards the thread's colour, in winding order.
 
-   [opacity] is per-pixel and therefore resolution dependent. To render at k
-   times the resolution the sequence was solved at, pass [opacity *. k], which
-   keeps the apparent darkness the same once the result is scaled back down. *)
+   [width] is the thread's thickness in pixels. To render at k times the
+   resolution the sequence was solved at, pass [~width:k]. *)
 
-let density ~pins ~(palette : Palette.t) ~opacity ~w ~h (steps : Solver.step array) =
+let image ~pins ~(palette : Palette.t) ~opacity ~board ?(width = 1.) ~w ~h
+    (steps : Solver.step array) =
   let frame = Geometry.make ~pins ~w ~h in
-  let d = Array.make (w * h * Image.channels) 0. in
+  let img = Image.create ~w ~h () in
+  for p = 0 to (w * h) - 1 do
+    for ch = 0 to Image.channels - 1 do
+      img.Image.data.{(p * Image.channels) + ch} <- board.(ch)
+    done
+  done;
   Array.iter
     (fun (s : Solver.step) ->
       let xa, ya = Geometry.pin frame s.a and xb, yb = Geometry.pin frame s.b in
-      let td = palette.(s.thread).Palette.density in
-      Raster.iter ~w ~h xa ya xb yb (fun p wgt ->
+      let c = palette.(s.thread).Palette.color in
+      Raster.iter ~width ~w ~h xa ya xb yb (fun p wgt ->
+          let beta = Float.min 1. (opacity *. wgt) in
           let o = p * Image.channels in
           for ch = 0 to Image.channels - 1 do
-            d.(o + ch) <- d.(o + ch) +. (opacity *. wgt *. td.(ch))
+            let old = img.Image.data.{o + ch} in
+            img.Image.data.{o + ch} <- old +. (beta *. (c.(ch) -. old))
           done))
     steps;
-  d
-
-let image ~pins ~palette ~opacity ~w ~h steps =
-  let d = density ~pins ~palette ~opacity ~w ~h steps in
-  let img = Image.create ~w ~h () in
-  for i = 0 to Array.length d - 1 do
-    img.Image.data.{i} <- exp (-.d.(i))
-  done;
   img
