@@ -4,12 +4,12 @@ open Test_util
 let steps =
   [|
     { Solver.a = 0; b = 5; thread = 0 };
-    { Solver.a = 5; b = 12; thread = 3 };
+    { Solver.a = 5; b = 12; thread = 0 };
     { Solver.a = 12; b = 2; thread = 1 };
   |]
 
 let svg_is_well_formed () =
-  let s = Svg.of_steps ~pins:16 ~size:400 ~palette:Palette.cmyk steps in
+  let s = Svg.of_steps ~pins:16 ~size:400 ~palette:fox_palette steps in
   Alcotest.(check bool) "opens" true (String.length s > 0 && String.sub s 0 4 = "<svg");
   Alcotest.(check bool) "declares the namespace" true
     (count_substring s "http://www.w3.org/2000/svg" = 1);
@@ -18,10 +18,12 @@ let svg_is_well_formed () =
   Alcotest.(check bool) "has a white board" true (count_substring s "#ffffff" >= 1)
 
 let svg_uses_the_thread_colours () =
-  let s = Svg.of_steps ~pins:16 ~size:400 ~palette:Palette.cmyk steps in
-  Alcotest.(check bool) "black" true (count_substring s Palette.black.Palette.hex >= 1);
-  Alcotest.(check bool) "magenta" true (count_substring s Palette.magenta.Palette.hex >= 1);
-  Alcotest.(check bool) "yellow never wound" true (count_substring s Palette.yellow.Palette.hex = 0)
+  let s = Svg.of_steps ~pins:16 ~size:400 ~palette:fox_palette steps in
+  Alcotest.(check int) "the dark thread, twice" 2
+    (count_substring s fox_palette.(0).Palette.hex);
+  Alcotest.(check int) "the orange thread, once" 1 (count_substring s fox_palette.(1).Palette.hex);
+  Alcotest.(check int) "the cream thread is never wound" 0
+    (count_substring s fox_palette.(2).Palette.hex)
 
 let svg_of_nothing_is_still_valid () =
   let s = Svg.of_steps ~pins:16 ~size:100 ~palette:Palette.grayscale [||] in
@@ -36,13 +38,14 @@ let svg_coordinates_stay_inside_the_viewbox () =
   Alcotest.(check int) "no negative coordinates" 0 (count_substring s "\"-")
 
 let instructions_list_every_step () =
-  let s = Svg.instructions ~palette:Palette.cmyk steps in
+  let s = Svg.instructions ~palette:fox_palette steps in
   let lines = String.split_on_char '\n' s |> List.filter (fun l -> l <> "") in
   Alcotest.(check int) "header plus three rows" 4 (List.length lines);
   Alcotest.(check string) "header" "step\tfrom\tto\tthread" (List.nth lines 0);
-  Alcotest.(check string) "first row" "1\t0\t5\tcyan" (List.nth lines 1);
-  Alcotest.(check string) "second row" "2\t5\t12\tblack" (List.nth lines 2);
-  Alcotest.(check string) "third row" "3\t12\t2\tmagenta" (List.nth lines 3)
+  let name i = fox_palette.(i).Palette.name in
+  Alcotest.(check string) "first row" ("1\t0\t5\t" ^ name 0) (List.nth lines 1);
+  Alcotest.(check string) "second row" ("2\t5\t12\t" ^ name 0) (List.nth lines 2);
+  Alcotest.(check string) "third row" ("3\t12\t2\t" ^ name 1) (List.nth lines 3)
 
 let instructions_of_nothing_is_just_a_header () =
   let s = Svg.instructions ~palette:Palette.grayscale [||] in
