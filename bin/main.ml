@@ -4,7 +4,7 @@ let input = ref ""
 let output = ref "out.ppm"
 let svg_out = ref ""
 let seq_out = ref ""
-let colour = ref false
+let colours = ref 0
 let pins = ref Solver.default_config.pins
 let lines = ref Solver.default_config.max_lines
 let opacity = ref Solver.default_config.opacity
@@ -12,6 +12,7 @@ let min_gap = ref Solver.default_config.min_gap
 let size = ref 300
 let preview_scale = ref 3
 let diameter = ref 0.6
+let board = ref "#ffffff"
 
 let usage = "stringart <input.ppm> [options]"
 
@@ -20,7 +21,8 @@ let specs =
     ("-o", Arg.Set_string output, " output PPM (default out.ppm)");
     ("--svg", Arg.Set_string svg_out, " also write an SVG");
     ("--seq", Arg.Set_string seq_out, " also write the winding instructions");
-    ("--color", Arg.Set colour, " wind in CMYK thread instead of black only");
+    ("--colors", Arg.Set_int colours, " wind in N thread colours taken from the image (0 = black only)");
+    ("--board", Arg.Set_string board, " board colour as #rrggbb (default white)");
     ("--pins", Arg.Set_int pins, " number of pins on the frame");
     ("--lines", Arg.Set_int lines, " maximum number of chords");
     ("--opacity", Arg.Set_float opacity, " density deposited per crossing");
@@ -33,12 +35,17 @@ let specs =
 let () =
   Arg.parse (Arg.align specs) (fun a -> input := a) usage;
   if !input = "" then (Arg.usage (Arg.align specs) usage; exit 1);
-  let palette = if !colour then Palette.cmyk else Palette.grayscale in
   let src = Ppm.read !input in
   let target = Image.fit_square src ~size:!size in
-  let target = if !colour then target else Image.desaturate target in
+  let target = if !colours > 0 then target else Image.desaturate target in
+  let frame = Geometry.make ~pins:!pins ~w:!size ~h:!size in
+  let palette =
+    if !colours > 0 then Palette.of_image ~k:!colours target frame else Palette.grayscale
+  in
+  let board = (Palette.of_hex !board).Palette.color in
   let config =
-    { Solver.pins = !pins; max_lines = !lines; opacity = !opacity; min_gap = !min_gap; start_pin = 0 }
+    { Solver.pins = !pins; max_lines = !lines; opacity = !opacity; min_gap = !min_gap;
+      start_pin = 0; board }
   in
   let t0 = Sys.time () in
   let res = Solver.solve ~config ~palette target in
@@ -46,8 +53,8 @@ let () =
   let k = max 1 !preview_scale in
   let out_size = !size * k in
   Ppm.write !output
-    (Render.image ~pins:!pins ~palette ~opacity:(!opacity *. float_of_int k) ~w:out_size ~h:out_size
-       res.Solver.steps);
+    (Render.image ~pins:!pins ~palette ~opacity:!opacity ~board ~width:(float_of_int k)
+       ~w:out_size ~h:out_size res.Solver.steps);
   if !svg_out <> "" then begin
     let oc = open_out !svg_out in
     output_string oc (Svg.of_steps ~pins:!pins ~size:out_size ~palette res.Solver.steps);
@@ -58,6 +65,7 @@ let () =
     output_string oc (Svg.instructions ~palette res.Solver.steps);
     close_out oc
   end;
+  Printf.printf "palette   %s\n" (String.concat " " (Palette.names palette));
   Printf.printf "chords    %d\n" (Array.length res.Solver.steps);
   Printf.printf "thread    %.1f m (frame %.2f m across)\n"
     (Solver.thread_meters res ~diameter_m:!diameter)
