@@ -2,6 +2,8 @@ let () =
   Alcotest.run "stringart"
     [
       Test_image.suite;
+      Test_oklab.suite;
+      Test_kmeans.suite;
       Test_geometry.suite;
       Test_raster.suite;
       Test_palette.suite;
