@@ -19,7 +19,7 @@ Command line, for batch work and for looking at numbers:
 
 ```sh
 dune exec bin/main.exe -- input.ppm -o out.ppm --lines 2500 --svg out.svg --seq winding.tsv
-dune exec bin/main.exe -- input.ppm -o out.ppm --color --lines 4000
+dune exec bin/main.exe -- input.ppm -o out.ppm --colors 6 --board '#e8c9a0' 
 ```
 
 PPM keeps the CLI free of an image codec dependency; the web app decodes
@@ -28,7 +28,7 @@ whatever the browser can open.
 ## Tests
 
 ```sh
-dune test              # 93 unit and property tests over the core
+dune test              # 119 unit and property tests over the core
 ./test/browser/run.sh  # drives the real page in headless Chrome, both modes
 ```
 
@@ -38,17 +38,30 @@ it write out the canvases it produced.
 
 ## How it works
 
-The board is white and thread is subtractive, so overlapping threads *multiply*
-transmittances. Everything is therefore done in **optical density**
-(`-log reflectance`), where stacking thread *adds* — which is what makes the
-problem linear and the solver simple.
+Thread is **opaque**, not a filter. An orange thread on a white board makes an
+orange line; it does not turn the white underneath orange the way ink would. So
+a crossing takes over a fraction of the pixel,
+
+```
+C  <-  C + a*w*(thread - C)
+```
+
+and colours mix optically at viewing distance. This is the whole reason colour
+works: the reachable colours are what you can mix out of the board and the
+palette, and overshooting a channel costs error straight away.
+
+Treating thread as subtractive ink with fixed CMY+K primaries instead — the
+obvious first guess — makes every subject come out muddy grey-green, because
+CMY only combines correctly when the layers are transparent.
 
 | | |
 |---|---|
 | `lib/image.ml` | linear-light RGB images, sRGB conversion, resampling |
 | `lib/geometry.ml` | the pin frame |
 | `lib/raster.ml` | anti-aliased line sampling, allocation-free |
-| `lib/palette.ml` | threads as normalised density vectors |
+| `lib/oklab.ml` | perceptually uniform colour space |
+| `lib/kmeans.ml` | deterministic clustering, seeded |
+| `lib/palette.ml` | threads, and the palette clustered out of the picture |
 | `lib/solver.ml` | greedy chord selection |
 | `lib/render.ml` | wound sequence back to a picture |
 | `lib/svg.ml`, `lib/ppm.ml` | exports |
@@ -57,31 +70,31 @@ Two consequences worth knowing:
 
 - **Grayscale is not a special case.** It is the colour solver run on a
   desaturated target with a single black thread, so there is one code path.
-- **Colour is one coupled solve**, not three independent channels. Each thread
-  is a density vector; a chord is scored by how well that vector matches the
-  residual, so the channels agree on where thread goes instead of fringing.
+- **Colour is one coupled solve**, not three independent channels. A chord is
+  scored by what laying it would do to the whole pixel, so the channels agree on
+  where thread goes instead of fringing.
+- **The palette comes from your picture.** k-means in OKLab over the pixels
+  inside the frame, so a fox comes out fox-coloured. Near-identical threads are
+  merged; the board colour is yours to choose.
 
 ### The solver
 
-At each step it looks at every chord leaving the current pin, admits the ones
-that would actually reduce the error, and among those takes the one whose
-thread colour best lines up with the residual — the standard matching-pursuit
-criterion, `<r,d>²/‖d‖²`. One traversal per chord scores all threads at once.
+At each step it looks at every chord leaving the current pin, takes the one that
+reduces the error most, lays it down and moves on, stopping when nothing helps.
+Expanding the error change leaves five sums that depend on the chord but not on
+the colour, so **one traversal per chord scores every thread at once**.
 
-The two halves of that rule do different jobs. Ranking on raw error reduction
-instead would pick whichever thread has the largest density vector — always
-black, since `‖d‖ = √3` against roughly 1 for the others — and the picture comes
-out grey no matter what colour the subject is. Keeping the error reduction as
-the *admission* test is what lets the solver stop on its own when no chord is
-worth winding.
+Scoring walks every other pixel and ignores anti-aliasing; whatever wins is then
+laid down over every pixel, anti-aliased, with the error kept exact. Measured on
+a photographic target at 1500 chords, that is 1.9× faster for 0.14 points of the
+target explained.
 
 Its known, deliberate limits:
 
 - myopic — it never removes a chord it has already placed;
 - blind to cost — a chord twice as long counts the same as a short one;
-- colour needs thread. A saturated subject wants far more chords than a
-  grayscale one, because each thread only blocks one part of the spectrum;
-  under-run, it comes out pale.
+- the walk is one thread that changes colour, rather than one continuous thread
+  per colour, so it is not yet a practical winding plan for a colour piece.
 
 ## Deliberately not done yet
 
