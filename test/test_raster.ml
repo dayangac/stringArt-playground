@@ -75,6 +75,55 @@ let interior_weight_is_conserved =
       let _, total, _ = collect ~w:64 ~h:64 x0 y0 x1 y1 in
       approx ~tol:1e-6 total (float_of_int (Raster.samples x0 y0 x1 y1)))
 
+let nearest_collect ?stride ~w ~h x0 y0 x1 y1 =
+  let acc = ref [] in
+  Raster.iter_nearest ?stride ~w ~h x0 y0 x1 y1 (fun p -> acc := p :: !acc);
+  !acc
+
+let nearest_walk_stays_in_bounds () =
+  let ps = nearest_collect ~w:64 ~h:64 3.2 7.8 60.1 55.4 in
+  Alcotest.(check bool) "non-empty" true (ps <> []);
+  List.iter (fun p -> Alcotest.(check bool) "in range" true (p >= 0 && p < 64 * 64)) ps
+
+let nearest_stride_thins_the_walk () =
+  let one = nearest_collect ~w:64 ~h:64 2. 2. 60. 60. in
+  let two = nearest_collect ~stride:2 ~w:64 ~h:64 2. 2. 60. 60. in
+  let four = nearest_collect ~stride:4 ~w:64 ~h:64 2. 2. 60. 60. in
+  Alcotest.(check bool)
+    (Printf.sprintf "%d then %d then %d" (List.length one) (List.length two) (List.length four))
+    true
+    (List.length two < List.length one && List.length four < List.length two)
+
+let nearest_stride_still_spans_the_chord () =
+  (* a thinned walk must still reach both ends, or long chords would be
+     mis-scored at their tips *)
+  let ps = nearest_collect ~stride:4 ~w:64 ~h:64 2.5 32. 60.5 32. in
+  let xs = List.map (fun p -> p mod 64) ps in
+  Alcotest.(check bool) "reaches the start" true (List.exists (fun x -> x <= 4) xs);
+  Alcotest.(check bool) "reaches the end" true (List.exists (fun x -> x >= 58) xs)
+
+let nearest_degenerate_line_is_one_pixel () =
+  Alcotest.(check int) "single sample" 1 (List.length (nearest_collect ~w:16 ~h:16 5. 5. 5. 5.));
+  Alcotest.(check int) "still one with a stride" 1
+    (List.length (nearest_collect ~stride:8 ~w:16 ~h:16 5. 5. 5. 5.))
+
+let thick_thread_covers_more () =
+  let total width =
+    let acc = ref 0. in
+    Raster.iter ~width ~w:64 ~h:64 10. 10. 50. 40. (fun _ wgt -> acc := !acc +. wgt);
+    !acc
+  in
+  let one = total 1. and three = total 3. in
+  Alcotest.(check bool)
+    (Printf.sprintf "width 1 deposits %g, width 3 deposits %g" one three)
+    true
+    (three > 2.5 *. one && three < 3.5 *. one)
+
+let thick_thread_stays_in_bounds () =
+  Raster.iter ~width:5. ~w:32 ~h:32 1. 1. 30. 2. (fun p wgt ->
+      Alcotest.(check bool) "index" true (p >= 0 && p < 32 * 32);
+      Alcotest.(check bool) "weight" true (wgt >= 0. && wgt <= 1.))
+
 let suite =
   ( "raster",
     [
@@ -88,6 +137,14 @@ let suite =
       Alcotest.test_case "fully outside line touches nothing" `Quick
         fully_outside_line_touches_nothing;
       Alcotest.test_case "reversal is symmetric" `Quick reversal_is_symmetric;
+      Alcotest.test_case "nearest walk stays in bounds" `Quick nearest_walk_stays_in_bounds;
+      Alcotest.test_case "nearest stride thins the walk" `Quick nearest_stride_thins_the_walk;
+      Alcotest.test_case "nearest stride still spans the chord" `Quick
+        nearest_stride_still_spans_the_chord;
+      Alcotest.test_case "nearest degenerate line is one pixel" `Quick
+        nearest_degenerate_line_is_one_pixel;
+      Alcotest.test_case "thick thread covers more" `Quick thick_thread_covers_more;
+      Alcotest.test_case "thick thread stays in bounds" `Quick thick_thread_stays_in_bounds;
     ]
     @ List.map QCheck_alcotest.to_alcotest
         [ indices_are_always_in_bounds; interior_weight_is_conserved ] )
