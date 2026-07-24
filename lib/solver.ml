@@ -37,6 +37,12 @@ let default_config =
     start_pin = 0;
     board = [| 1.; 1.; 1. |] }
 
+(* Scoring looks at every other pixel along a chord. Measured on a photographic
+   target at 1500 chords: 1.9x faster for 0.14 points of the target explained
+   (95.14% -> 95.00%). Stride 3 buys 2.6x but costs 0.41. Whatever wins is
+   still laid down over every pixel, anti-aliased. *)
+let score_stride = 2
+
 type step = { a : int; b : int; thread : int }
 
 type result = {
@@ -119,7 +125,7 @@ let solve ?(config = default_config) ?(palette = Palette.grayscale) img =
            let se0 = ref 0. and se1 = ref 0. and se2 = ref 0. in
            let sc0 = ref 0. and sc1 = ref 0. and sc2 = ref 0. in
            let sec = ref 0. and scc = ref 0. and n = ref 0 in
-           Raster.iter_nearest ~w ~h px.(!cur) py.(!cur) px.(j) py.(j) (fun p ->
+           Raster.iter_nearest ~stride:score_stride ~w ~h px.(!cur) py.(!cur) px.(j) py.(j) (fun p ->
                let o = p * Image.channels in
                se0 := !se0 +. e3.(o);
                se1 := !se1 +. e3.(o + 1);
