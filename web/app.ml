@@ -2,7 +2,7 @@ open Brr
 open Brr_canvas
 open Stringart
 
-let result_size = 720
+let preview_scale = 3
 
 let el id =
   match Document.find_el_by_id G.document (Jstr.v id) with
@@ -63,6 +63,17 @@ let set_download id ~name ~mime text =
   El.set_at (Jstr.v "download") (Some (Jstr.v name)) a;
   El.set_class (Jstr.v "hidden") false a
 
+(* Show the threads the picture was reduced to, so the palette is not a
+   black box and the user can go buy that thread. *)
+let show_palette (palette : Palette.t) =
+  let chip (t : Palette.thread) =
+    El.span
+      ~at:[ At.class' (Jstr.v "chip"); At.style (Jstr.v ("background:" ^ t.Palette.hex));
+            At.title (Jstr.v t.Palette.hex) ]
+      []
+  in
+  El.set_children (el "palette") (Array.to_list (Array.map chip palette))
+
 let source = ref None
 
 let wind () =
@@ -70,24 +81,30 @@ let wind () =
   | None -> set_text "status" "Pick an image first."
   | Some src ->
       let size = int_value "size" in
-      let colour = str_value "mode" = "colour" in
-      let palette = if colour then Palette.cmyk else Palette.grayscale in
+      let colours = if str_value "mode" = "colour" then int_value "colours" else 0 in
       let pins = int_value "pins" in
       let opacity = float_value "opacity" in
+      let board = (Palette.of_hex (str_value "board")).Palette.color in
+      let target = sample_source src ~size in
+      let target = if colours > 0 then target else Image.desaturate target in
+      let palette =
+        if colours > 0 then Palette.of_image ~k:colours target (Geometry.make ~pins ~w:size ~h:size)
+        else Palette.grayscale
+      in
       let config =
         { Solver.pins;
           max_lines = int_value "lines";
           opacity;
           min_gap = int_value "gap";
-          start_pin = 0 }
+          start_pin = 0;
+          board }
       in
-      let target = sample_source src ~size in
-      let target = if colour then target else Image.desaturate target in
       let res = Solver.solve ~config ~palette target in
-      let scale = float_of_int result_size /. float_of_int size in
+      let out = size * preview_scale in
       draw_image (Canvas.of_el (el "result"))
-        (Render.image ~pins ~palette ~opacity:(opacity *. scale) ~w:result_size ~h:result_size
-           res.Solver.steps);
+        (Render.image ~pins ~palette ~opacity ~board ~width:(float_of_int preview_scale) ~w:out
+           ~h:out res.Solver.steps);
+      show_palette palette;
       let explained =
         100. *. (1. -. (res.Solver.final_error /. Float.max 1e-9 res.Solver.initial_error))
       in
@@ -96,7 +113,8 @@ let wind () =
         (Printf.sprintf "%.0f m" (Solver.thread_meters res ~diameter_m:(float_value "diameter")));
       set_text "stat-match" (Printf.sprintf "%.1f%%" explained);
       set_download "dl-svg" ~name:"string-art.svg" ~mime:"image/svg+xml"
-        (Svg.of_steps ~pins ~size:result_size ~palette res.Solver.steps);
+        (Svg.of_steps ~pins ~size:out ~palette ~stroke_width:(float_of_int preview_scale)
+           ~stroke_opacity:opacity res.Solver.steps);
       set_download "dl-seq" ~name:"winding.tsv" ~mime:"text/tab-separated-values"
         (Svg.instructions ~palette res.Solver.steps);
       set_text "status" "Done."
@@ -138,4 +156,4 @@ let () =
       sync ();
       ignore (Ev.listen Ev.input (fun _ -> sync ()) (El.as_target (el input))))
     [ ("pins", "out-pins"); ("lines", "out-lines"); ("opacity", "out-opacity"); ("size", "out-size");
-      ("gap", "out-gap") ]
+      ("gap", "out-gap"); ("colours", "out-colours") ]
