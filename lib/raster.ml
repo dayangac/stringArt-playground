@@ -12,8 +12,8 @@ let samples x0 y0 x1 y1 =
 (* Nearest-pixel walk over the same sample positions, for scoring. A quarter of
    the work of the bilinear splat, and the ranking barely notices the
    difference; whatever gets wound is applied with [iter] below. *)
-let iter_nearest ~w ~h x0 y0 x1 y1 f =
-  let n = samples x0 y0 x1 y1 in
+let iter_nearest ?(stride = 1) ~w ~h x0 y0 x1 y1 f =
+  let n = max 1 (samples x0 y0 x1 y1 / stride) in
   let inv = if n <= 1 then 0. else 1. /. float_of_int (n - 1) in
   let dx = (x1 -. x0) *. inv and dy = (y1 -. y0) *. inv in
   let x = ref (x0 +. 0.5) and y = ref (y0 +. 0.5) in
