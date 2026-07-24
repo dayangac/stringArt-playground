@@ -98,3 +98,100 @@ let of_image ?(k = 6) ?(seed = 1) (img : Image.t) (frame : Geometry.t) =
            of_color [| r; g; b |])
          distinct)
   end
+
+(* The board colour that leaves the least work to do.
+
+   Thread only ever moves a pixel away from the board and towards one of its
+   own colours, so what matters is not how close the board looks on average but
+   how much of the picture the palette can still reach from it. Scoring a
+   candidate by plain distance picks a black board for a single black thread,
+   which then has nothing left to do.
+
+   Each pixel is therefore scored on the segment from the board towards some
+   thread colour, by two things: how close it can get, and how much coverage
+   getting there costs. Coverage matters as much as reach -- from a white board
+   every colour in the palette is reachable, but reaching it means burying the
+   board completely, which is exactly the thread a matching board would save.
+   Coverage goes as -log(1-u), so a pixel that has to travel the whole way
+   costs unboundedly more than one already sitting on its colour.
+
+   Scoring on reach alone would tie every board that can reach the picture;
+   scoring on distance alone hands a single black thread a black board and
+   leaves it nothing to do. *)
+
+let board_samples = 1024
+
+let sample_pixels (img : Image.t) (frame : Geometry.t) ~wanted =
+  let total = img.Image.w * img.Image.h in
+  let stride = max 1 (int_of_float (sqrt (float_of_int total /. float_of_int wanted))) in
+  let acc = ref [] in
+  let y = ref 0 in
+  while !y < img.Image.h do
+    let x = ref 0 in
+    while !x < img.Image.w do
+      let dx = float_of_int !x +. 0.5 -. frame.Geometry.cx
+      and dy = float_of_int !y +. 0.5 -. frame.Geometry.cy in
+      if (dx *. dx) +. (dy *. dy) <= frame.Geometry.r *. frame.Geometry.r then begin
+        let o = Image.offset img ~x:!x ~y:!y in
+        acc := [| img.Image.data.{o}; img.Image.data.{o + 1}; img.Image.data.{o + 2} |] :: !acc
+      end;
+      x := !x + stride
+    done;
+    y := !y + stride
+  done;
+  Array.of_list !acc
+
+(* Weight on being unreachable, relative to the coverage cost of getting there.
+   Squared errors here run to about 3, coverage to about 7, so this makes reach
+   the first consideration and thread the second. *)
+let reach_weight = 50.
+
+(* What it costs to bring [t] as close as the segment [b] -> [c] allows: how
+   far short it falls, plus the coverage the move needs. *)
+let segment_cost (t : float array) (b : float array) (c : float array) =
+  let num = ref 0. and den = ref 0. in
+  for i = 0 to 2 do
+    let d = c.(i) -. b.(i) in
+    num := !num +. ((t.(i) -. b.(i)) *. d);
+    den := !den +. (d *. d)
+  done;
+  let u = if !den <= 0. then 0. else Float.min 1. (Float.max 0. (!num /. !den)) in
+  let residual = ref 0. in
+  for i = 0 to 2 do
+    let v = b.(i) +. (u *. (c.(i) -. b.(i))) -. t.(i) in
+    residual := !residual +. (v *. v)
+  done;
+  (reach_weight *. !residual) -. log (1. -. Float.min 0.999 u)
+
+let best_board (palette : t) (img : Image.t) (frame : Geometry.t) =
+  if Array.length palette = 0 then invalid_arg "Palette.best_board: empty palette";
+  let samples = sample_pixels img frame ~wanted:board_samples in
+  if Array.length samples = 0 then Array.copy white.color
+  else begin
+    (* the palette's own colours, plus the two boards anyone can actually buy *)
+    let candidates =
+      Array.append (Array.map (fun t -> t.color) palette) [| white.color; black.color |]
+    in
+    let cost (b : float array) =
+      Array.fold_left
+        (fun acc t ->
+          let best = ref infinity in
+          Array.iter
+            (fun (th : thread) ->
+              let e = segment_cost t b th.color in
+              if e < !best then best := e)
+            palette;
+          acc +. !best)
+        0. samples
+    in
+    let best = ref candidates.(0) and best_cost = ref infinity in
+    Array.iter
+      (fun c ->
+        let v = cost c in
+        if v < !best_cost then begin
+          best_cost := v;
+          best := c
+        end)
+      candidates;
+    Array.copy !best
+  end
