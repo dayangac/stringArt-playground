@@ -62,6 +62,10 @@ let solid ~w ~h (r, g, b) =
   done;
   img
 
+(* A palette of the kind Palette.of_image produces: a few real colours. *)
+let fox_palette =
+  [| Palette.of_hex "#140f0f"; Palette.of_hex "#db6b29"; Palette.of_hex "#f7f2eb" |]
+
 let mean_luminance (img : Image.t) =
   let acc = ref 0. in
   for y = 0 to img.h - 1 do
