@@ -1,8 +1,11 @@
 open Stringart
 open Test_util
 
-let cfg ?(pins = 32) ?(max_lines = 60) ?(min_gap = 1) ?(opacity = 0.18) ?(start_pin = 0) () =
-  { Solver.pins; max_lines; opacity; min_gap; start_pin }
+let white_board = [| 1.; 1.; 1. |]
+
+let cfg ?(pins = 32) ?(max_lines = 60) ?(min_gap = 1) ?(opacity = 0.18) ?(start_pin = 0)
+    ?(board = white_board) () =
+  { Solver.pins; max_lines; opacity; min_gap; start_pin; board }
 
 let solve ?(palette = Palette.grayscale) ?config img =
   let config = match config with Some c -> c | None -> cfg () in
@@ -46,7 +49,7 @@ let output_is_a_continuous_walk () =
     steps
 
 let never_reuses_a_chord () =
-  let r = solve ~palette:Palette.cmyk ~config:(cfg ~max_lines:120 ()) (disc ~w:48 ~h:48) in
+  let r = solve ~palette:fox_palette ~config:(cfg ~max_lines:120 ()) (disc ~w:48 ~h:48) in
   let seen = Hashtbl.create 256 in
   Array.iter
     (fun (s : Solver.step) ->
@@ -121,15 +124,15 @@ let reported_error_matches_the_render () =
   let img = disc ~w:64 ~h:64 in
   let config = cfg ~pins:48 ~max_lines:80 () in
   let r = solve ~config img in
-  let d =
-    Render.density ~pins:config.Solver.pins ~palette:Palette.grayscale
-      ~opacity:config.Solver.opacity ~w:64 ~h:64 r.Solver.steps
+  let out =
+    Render.image ~pins:config.Solver.pins ~palette:Palette.grayscale
+      ~opacity:config.Solver.opacity ~board:white_board ~w:64 ~h:64 r.Solver.steps
   in
-  let target = Solver.target_density img r.Solver.frame in
+  let target = Solver.target img r.Solver.frame ~board:white_board in
   let e = ref 0. in
   Array.iteri
     (fun i t ->
-      let v = t -. d.(i) in
+      let v = t -. out.Image.data.{i} in
       e := !e +. (v *. v))
     target;
   Alcotest.(check bool)
@@ -137,13 +140,13 @@ let reported_error_matches_the_render () =
     true
     (Float.abs (r.Solver.final_error -. !e) <= 1e-6 *. Float.max 1. r.Solver.initial_error)
 
-let target_density_is_zero_outside_the_disc () =
+let target_is_the_board_outside_the_disc () =
   let img = Image.create ~w:32 ~h:32 () in
   let frame = Geometry.make ~pins:16 ~w:32 ~h:32 in
-  let d = Solver.target_density img frame in
-  (* corners are outside the inscribed circle *)
-  check_float ~tol:1e-12 "top-left corner" 0. d.(0);
-  Alcotest.(check bool) "centre is dark" true (d.(Image.offset img ~x:16 ~y:16) > 1.)
+  let t = Solver.target img frame ~board:white_board in
+  (* corners are outside the inscribed circle, so nothing is asked of them *)
+  check_float ~tol:1e-12 "top-left corner is board" 1. t.(0);
+  check_float ~tol:1e-12 "centre is the picture" 0. t.(Image.offset img ~x:16 ~y:16)
 
 let grayscale_uses_only_black () =
   let r = solve ~config:(cfg ~max_lines:40 ()) (Image.desaturate (solid ~w:48 ~h:48 (0.9, 0.2, 0.1))) in
@@ -151,56 +154,85 @@ let grayscale_uses_only_black () =
     (fun (s : Solver.step) -> Alcotest.(check int) "black thread" 0 s.Solver.thread)
     r.Solver.steps
 
-(* Chords are ranked by how well the thread's colour lines up with the
-   residual, so a red target is wound in magenta and yellow. Ranking on raw
-   error reduction instead makes black win almost every step and the picture
-   comes out grey. *)
-let colour_picks_the_subtractive_complement () =
-  let img = solid ~w:64 ~h:64 (0.9, 0.05, 0.05) in
-  let r = solve ~palette:Palette.cmyk ~config:(cfg ~pins:64 ~max_lines:900 ()) img in
+let mean_channel (img : Image.t) ch =
+  let acc = ref 0. in
+  for y = 0 to img.Image.h - 1 do
+    for x = 0 to img.Image.w - 1 do
+      acc := !acc +. Image.get img ~x ~y ~ch
+    done
+  done;
+  !acc /. float_of_int (img.Image.w * img.Image.h)
+
+let colour_reaches_for_the_matching_thread () =
+  let img = solid ~w:64 ~h:64 (0.86, 0.42, 0.16) in
+  let r = solve ~palette:fox_palette ~config:(cfg ~pins:64 ~max_lines:600 ()) img in
   let count k =
     Array.fold_left (fun a (s : Solver.step) -> if s.Solver.thread = k then a + 1 else a) 0
       r.Solver.steps
   in
-  let cyan = count 0 and magenta = count 1 and yellow = count 2 and black = count 3 in
-  let where = Printf.sprintf "(c=%d m=%d y=%d k=%d)" cyan magenta yellow black in
-  Alcotest.(check int) "cyan only blocks red, which the target keeps" 0 cyan;
-  Alcotest.(check bool) ("magenta used " ^ where) true (magenta > 0);
-  Alcotest.(check bool) ("yellow used " ^ where) true (yellow > 0);
-  Alcotest.(check bool) ("hue carries the picture, not black " ^ where) true
-    (magenta + yellow > 4 * black);
-  Alcotest.(check bool) "a hue-aligned thread leads" true (r.Solver.steps.(0).Solver.thread <> 3)
+  let dark = count 0 and orange = count 1 and cream = count 2 in
+  let where = Printf.sprintf "(dark=%d orange=%d cream=%d)" dark orange cream in
+  Alcotest.(check bool) ("the orange thread carries an orange target " ^ where) true
+    (orange > dark && orange > cream)
 
 (* The regression guard for grey colour output: what comes off the frame has to
-   keep the target's channel ordering, not average out to neutral. *)
+   keep the target's hue, not average out to neutral. *)
 let colour_render_keeps_the_target_hue () =
   let size = 128 in
   let img = orange_with_dark_blob ~w:size ~h:size in
   let config = cfg ~pins:128 ~max_lines:700 () in
-  let r = Solver.solve ~config ~palette:Palette.cmyk img in
+  let r = Solver.solve ~config ~palette:fox_palette img in
   let out =
-    Render.image ~pins:128 ~palette:Palette.cmyk ~opacity:config.Solver.opacity ~w:size ~h:size
-      r.Solver.steps
+    Render.image ~pins:128 ~palette:fox_palette ~opacity:config.Solver.opacity
+      ~board:config.Solver.board ~w:size ~h:size r.Solver.steps
   in
-  let mean ch =
-    let acc = ref 0. in
-    for y = 0 to size - 1 do
-      for x = 0 to size - 1 do
-        acc := !acc +. Image.get out ~x ~y ~ch
-      done
-    done;
-    !acc /. float_of_int (size * size)
-  in
-  let red = mean 0 and green = mean 1 and blue = mean 2 in
+  let red = mean_channel out 0 and green = mean_channel out 1 and blue = mean_channel out 2 in
   let seen = Printf.sprintf "(%.3f %.3f %.3f)" red green blue in
   Alcotest.(check bool) ("orange stays ordered r>g>b " ^ seen) true (red > green && green > blue);
   Alcotest.(check bool) ("and does not wash out to grey " ^ seen) true (red -. blue > 0.08)
 
+(* Nothing to do when the board is already the colour of the picture. *)
+let a_matching_board_needs_no_thread () =
+  let img = solid ~w:48 ~h:48 (0.3, 0.5, 0.7) in
+  let board = [| 0.3; 0.5; 0.7 |] in
+  let r = solve ~palette:fox_palette ~config:(cfg ~board ()) img in
+  check_float ~tol:1e-9 "no error to start with" 0. r.Solver.initial_error;
+  Alcotest.(check int) "no steps" 0 (Array.length r.Solver.steps)
+
+(* A dark board wants light thread, which is the opposite of a white one.
+   Both may use a little of the other to walk back an overshoot, so this is
+   about which thread carries the picture. *)
+let the_board_colour_changes_what_gets_wound () =
+  let img = solid ~w:64 ~h:64 (0.5, 0.5, 0.5) in
+  let palette = [| Palette.black; Palette.white |] in
+  let on_white = solve ~palette ~config:(cfg ~pins:64 ~max_lines:200 ()) img in
+  let on_black =
+    solve ~palette ~config:(cfg ~pins:64 ~max_lines:200 ~board:[| 0.; 0.; 0. |] ()) img
+  in
+  let majority (r : Solver.result) =
+    let black =
+      Array.fold_left (fun a (s : Solver.step) -> if s.Solver.thread = 0 then a + 1 else a) 0
+        r.Solver.steps
+    in
+    (black, Array.length r.Solver.steps - black)
+  in
+  Alcotest.(check bool) "both boards need winding" true
+    (Array.length on_white.Solver.steps > 0 && Array.length on_black.Solver.steps > 0);
+  let wb, ww = majority on_white and bb, bw = majority on_black in
+  Alcotest.(check bool)
+    (Printf.sprintf "white board is mostly darkened (black=%d white=%d)" wb ww)
+    true (wb > ww);
+  Alcotest.(check bool)
+    (Printf.sprintf "black board is mostly lightened (black=%d white=%d)" bb bw)
+    true (bw > bb);
+  Alcotest.(check int) "a white board starts with black" 0 on_white.Solver.steps.(0).Solver.thread;
+  Alcotest.(check int) "a black board starts with white" 1 on_black.Solver.steps.(0).Solver.thread
+
 let colour_beats_grayscale_on_a_colour_target () =
-  let img = solid ~w:64 ~h:64 (0.9, 0.05, 0.05) in
-  let config = cfg ~pins:64 ~max_lines:900 () in
+  let img = solid ~w:64 ~h:64 (0.86, 0.42, 0.16) in
+  let config = cfg ~pins:64 ~max_lines:600 () in
   let gray = solve ~palette:Palette.grayscale ~config img in
-  let colour = solve ~palette:Palette.cmyk ~config img in
+  let colour = solve ~palette:fox_palette ~config img in
   Alcotest.(check bool) "colour fits better" true
     (colour.Solver.final_error < gray.Solver.final_error)
 
@@ -243,15 +275,18 @@ let suite =
         thread_meters_scales_with_the_frame;
       Alcotest.test_case "reported error matches the render" `Quick
         reported_error_matches_the_render;
-      Alcotest.test_case "target density is zero outside the disc" `Quick
-        target_density_is_zero_outside_the_disc;
+      Alcotest.test_case "target is the board outside the disc" `Quick
+        target_is_the_board_outside_the_disc;
       Alcotest.test_case "grayscale uses only black" `Quick grayscale_uses_only_black;
-      Alcotest.test_case "colour picks the subtractive complement" `Quick
-        colour_picks_the_subtractive_complement;
+      Alcotest.test_case "colour reaches for the matching thread" `Quick
+        colour_reaches_for_the_matching_thread;
       Alcotest.test_case "colour render keeps the target hue" `Quick
         colour_render_keeps_the_target_hue;
       Alcotest.test_case "colour beats grayscale on a colour target" `Quick
         colour_beats_grayscale_on_a_colour_target;
+      Alcotest.test_case "a matching board needs no thread" `Quick a_matching_board_needs_no_thread;
+      Alcotest.test_case "the board colour changes what gets wound" `Quick
+        the_board_colour_changes_what_gets_wound;
     ]
     @ List.map QCheck_alcotest.to_alcotest
         [ error_never_increases_over_a_run; walk_is_always_continuous ] )
