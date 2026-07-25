@@ -41,6 +41,7 @@ async function wind(mode) {
     ms: Date.now() - t0,
     status: document.getElementById("status").textContent,
     chords: parseInt(document.getElementById("stat-chords").textContent, 10),
+    cuts: document.getElementById("stat-chords").textContent,
     thread: document.getElementById("stat-thread").textContent,
     match: parseFloat(document.getElementById("stat-match").textContent),
     dark: darkFraction(document.getElementById("result")),
