@@ -47,8 +47,9 @@ def check(report):
             problems.append("%s: status %r" % (mode, r["status"]))
         if not (r["chords"] and r["chords"] > 100):
             problems.append("%s: only %s chords" % (mode, r["chords"]))
-        if not (r["match"] and r["match"] > 25):
-            problems.append("%s: explained only %s%%" % (mode, r["match"]))
+        # stat-match is SSIM against the target now, not a percentage
+        if not (r["match"] and r["match"] > 0.05):
+            problems.append("%s: ssim only %s" % (mode, r["match"]))
         if r["dark"] < 0.05:
             problems.append("%s: canvas looks blank (%.3f dark)" % (mode, r["dark"]))
         if r["svgLines"] != r["chords"]:
@@ -79,13 +80,15 @@ if out:
 problems = check(report)
 for r in report.get("runs", []):
     print(
-        "  %-9s %s chords  %s  %s%% explained  %s svg lines  %sms"
+        "  %-9s %s chords  %s  ssim %s  %s svg lines  %sms"
         % (r["mode"], r["chords"], r["thread"], r["match"], r["svgLines"], r.get("ms"))
     )
 if problems:
     print("browser test FAILED")
     for p in problems:
         print("  - " + p)
-    print(json.dumps(report, indent=2)[:2000])
+    trimmed = {k: v for k, v in report.items() if k != "runs"}
+    trimmed["runs"] = [{k: v for k, v in r.items() if k != "png"} for r in report.get("runs", [])]
+    print(json.dumps(trimmed, indent=2)[:2000])
     sys.exit(1)
 print("browser test passed")
