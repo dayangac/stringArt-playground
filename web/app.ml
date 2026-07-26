@@ -4,6 +4,10 @@ open Stringart
 
 let preview_scale = 3
 
+(* A chord costs its length in thread plus a fixed amount of handling; without
+   the second term a length penalty drifts to swarms of tiny rim chords. *)
+let economy_chord_cost = 60.
+
 let el id =
   match Document.find_el_by_id G.document (Jstr.v id) with
   | Some e -> e
@@ -12,6 +16,8 @@ let el id =
 let str_value id = Jstr.to_string (El.prop El.Prop.value (el id))
 let int_value id = int_of_string (str_value id)
 let float_value id = float_of_string (str_value id)
+let is_checked id = El.prop El.Prop.checked (el id)
+let set_value id v = El.set_prop El.Prop.value (Jstr.v v) (el id)
 let set_text id s = El.set_children (el id) [ El.txt' s ]
 
 let jv_int e prop = Jv.to_int (Jv.get (El.to_jv e) prop)
@@ -84,39 +90,61 @@ let wind () =
       let colours = if str_value "mode" = "colour" then int_value "colours" else 0 in
       let pins = int_value "pins" in
       let opacity = float_value "opacity" in
-      let board = (Palette.of_hex (str_value "board")).Palette.color in
       let target = sample_source src ~size in
       let target = if colours > 0 then target else Image.desaturate target in
+      let frame = Geometry.make ~pins ~w:size ~h:size in
       let palette =
-        if colours > 0 then Palette.of_image ~k:colours target (Geometry.make ~pins ~w:size ~h:size)
-        else Palette.grayscale
+        if colours > 0 then Palette.of_image ~k:colours target frame else Palette.grayscale
+      in
+      let economy = float_value "economy" in
+      let board =
+        if is_checked "auto-board" then begin
+          let b = Palette.best_board palette target frame in
+          set_value "board" (Palette.to_hex b);
+          b
+        end
+        else (Palette.of_hex (str_value "board")).Palette.color
       in
       let config =
-        { Solver.pins;
+        { Solver.default_config with
+          pins;
           max_lines = int_value "lines";
           opacity;
           min_gap = int_value "gap";
-          start_pin = 0;
-          board }
+          board;
+          scoring = (if economy > 0. then Solver.Per_length else Solver.Absolute);
+          chord_cost = economy_chord_cost }
       in
       let res = Solver.solve ~config ~palette target in
+      let steps, thread_px, cuts =
+        if economy <= 0. then (res.Solver.steps, res.Solver.thread_px, 0)
+        else
+          let p =
+            Prune.to_budget ~pins ~palette ~opacity ~board ~frame ~target ~gains:res.Solver.gains
+              ~max_ssim_drop:economy res.Solver.steps
+          in
+          (p.Prune.steps, p.Prune.thread_px, p.Prune.cuts)
+      in
       let out = size * preview_scale in
       draw_image (Canvas.of_el (el "result"))
         (Render.image ~pins ~palette ~opacity ~board ~width:(float_of_int preview_scale) ~w:out
-           ~h:out res.Solver.steps);
+           ~h:out steps);
       show_palette palette;
-      let explained =
-        100. *. (1. -. (res.Solver.final_error /. Float.max 1e-9 res.Solver.initial_error))
+      let shown = Render.image ~pins ~palette ~opacity ~board ~w:size ~h:size steps in
+      let m = Metrics.compare ~frame target shown in
+      let metres =
+        thread_px *. float_value "diameter" /. (2. *. res.Solver.frame.Geometry.r)
       in
-      set_text "stat-chords" (string_of_int (Array.length res.Solver.steps));
-      set_text "stat-thread"
-        (Printf.sprintf "%.0f m" (Solver.thread_meters res ~diameter_m:(float_value "diameter")));
-      set_text "stat-match" (Printf.sprintf "%.1f%%" explained);
+      set_text "stat-chords"
+        (Printf.sprintf "%d%s" (Array.length steps)
+           (if cuts > 0 then Printf.sprintf " / %d cuts" cuts else ""));
+      set_text "stat-thread" (Printf.sprintf "%.0f m" metres);
+      set_text "stat-match" (Printf.sprintf "%.3f" m.Metrics.ssim);
       set_download "dl-svg" ~name:"string-art.svg" ~mime:"image/svg+xml"
         (Svg.of_steps ~pins ~size:out ~palette ~stroke_width:(float_of_int preview_scale)
-           ~stroke_opacity:opacity res.Solver.steps);
+           ~stroke_opacity:opacity steps);
       set_download "dl-seq" ~name:"winding.tsv" ~mime:"text/tab-separated-values"
-        (Svg.instructions ~palette res.Solver.steps);
+        (Svg.instructions ~palette steps);
       set_text "status" "Done."
 
 let describe = function
@@ -156,4 +184,4 @@ let () =
       sync ();
       ignore (Ev.listen Ev.input (fun _ -> sync ()) (El.as_target (el input))))
     [ ("pins", "out-pins"); ("lines", "out-lines"); ("opacity", "out-opacity"); ("size", "out-size");
-      ("gap", "out-gap"); ("colours", "out-colours") ]
+      ("gap", "out-gap"); ("colours", "out-colours"); ("economy", "out-economy") ]
