@@ -75,6 +75,15 @@ let mean_luminance (img : Image.t) =
   done;
   !acc /. float_of_int (img.w * img.h)
 
+(* Do two windings agree step for step? *)
+let same_steps (a : Solver.step array) (b : Solver.step array) =
+  Array.length a = Array.length b
+  && Array.for_all
+       (fun i ->
+         let x = a.(i) and y = b.(i) in
+         x.Solver.a = y.Solver.a && x.Solver.b = y.Solver.b && x.Solver.thread = y.Solver.thread)
+       (Array.init (Array.length a) (fun i -> i))
+
 let count_substring hay needle =
   let n = String.length needle and h = String.length hay in
   let rec go i acc =
