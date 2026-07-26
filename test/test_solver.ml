@@ -5,7 +5,7 @@ let white_board = [| 1.; 1.; 1. |]
 
 let cfg ?(pins = 32) ?(max_lines = 60) ?(min_gap = 1) ?(opacity = 0.18) ?(start_pin = 0)
     ?(board = white_board) () =
-  { Solver.pins; max_lines; opacity; min_gap; start_pin; board }
+  { Solver.default_config with pins; max_lines; opacity; min_gap; start_pin; board }
 
 let solve ?(palette = Palette.grayscale) ?config img =
   let config = match config with Some c -> c | None -> cfg () in
