@@ -92,7 +92,7 @@ let a_thin_thread_at_high_resolution_is_lighter () =
 let solved_result_renders_close_to_the_target () =
   let img = disc ~w:64 ~h:64 in
   let config =
-    { Solver.pins = 48; max_lines = 400; opacity = 0.18; min_gap = 1; start_pin = 0; board = white }
+    { Solver.default_config with pins = 48; max_lines = 400; opacity = 0.18; board = white }
   in
   let r = Solver.solve ~config ~palette:Palette.grayscale img in
   let out =
