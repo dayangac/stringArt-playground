@@ -11,4 +11,5 @@ let () =
       Test_solver.suite;
       Test_render.suite;
       Test_export.suite;
+      Test_economy.suite;
     ]
