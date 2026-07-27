@@ -19,7 +19,8 @@ Command line, for batch work and for looking at numbers:
 
 ```sh
 dune exec bin/main.exe -- input.ppm -o out.ppm --lines 2500 --svg out.svg --seq winding.tsv
-dune exec bin/main.exe -- input.ppm -o out.ppm --colors 6 --board '#e8c9a0' 
+dune exec bin/main.exe -- input.ppm -o out.ppm --colors 6 --auto-board --prune 0.01
+dune exec bin/bench.exe -- input.ppm            # what each thread-saving lever costs and buys
 ```
 
 PPM keeps the CLI free of an image codec dependency; the web app decodes
@@ -28,7 +29,7 @@ whatever the browser can open.
 ## Tests
 
 ```sh
-dune test              # 119 unit and property tests over the core
+dune test              # 168 unit and property tests over the core
 ./test/browser/run.sh  # drives the real page in headless Chrome, both modes
 ```
 
@@ -64,6 +65,8 @@ CMY only combines correctly when the layers are transparent.
 | `lib/palette.ml` | threads, and the palette clustered out of the picture |
 | `lib/solver.ml` | greedy chord selection |
 | `lib/render.ml` | wound sequence back to a picture |
+| `lib/metrics.ml` | viewing-distance blur, SSIM, OKLab delta-E |
+| `lib/prune.ml` | backward elimination to a fidelity budget |
 | `lib/svg.ml`, `lib/ppm.ml` | exports |
 
 Two consequences worth knowing:
@@ -96,11 +99,65 @@ Its known, deliberate limits:
 - the walk is one thread that changes colour, rather than one continuous thread
   per colour, so it is not yet a practical winding plan for a colour piece.
 
+## Using less thread
+
+The goal is to use as little thread as possible while the picture still looks
+the same, so "looks the same" is a measured number, not an opinion: SSIM on
+OKLab lightness plus mean OKLab delta-E, both taken through a blur derived from
+one arcminute of acuity at the intended viewing distance.
+
+`dune exec bin/bench.exe -- image.ppm` runs every lever against the baseline.
+On a fox-like target, 220px working resolution, 180 pins, 1500 chords, six
+colours, a 0.6 m frame seen from 2 m:
+
+| variant | metres | vs base | ssim | deltaE | cuts |
+|---|---|---|---|---|---|
+| baseline | 723.9 | — | 0.412 | 0.132 | 0 |
+| per-length ranking | 642.7 | −11.2% | 0.386 | 0.145 | 0 |
+| perceptual weighting | 722.2 | −0.2% | 0.315 | 0.138 | 0 |
+| board matched to image | 686.1 | −5.2% | **0.693** | **0.066** | 0 |
+| chord reuse (×3) | 723.9 | 0.0% | 0.412 | 0.132 | 0 |
+| all levers | 656.9 | −9.3% | 0.594 | 0.066 | 0 |
+| all + prune 0.03 | **612.6** | **−15.4%** | 0.564 | 0.068 | 40 |
+
+So: **15% less thread, and it looks better than the baseline on both measures**
+— SSIM 0.56 against 0.41, colour error halved. The catch is 40 cuts, and that
+matching the board means buying or painting a board that colour.
+
+What each lever actually does, including where it does nothing:
+
+- **Board matched to the image** is the one that matters, and it is barely an
+  algorithm. Thread only has to cover what differs from the board, so a large
+  flat background is free if the board already is that colour. Choosing it has
+  to weigh *coverage*, not just closeness: scoring by distance alone hands a
+  single black thread a black board and leaves it nothing to do.
+- **Per-length ranking** trades fidelity for thread rather than giving it away:
+  −11% thread, but SSIM falls too. A real Pareto move, not a free win.
+- **Pruning** drops the chords that stopped paying, ranked by what each one
+  actually bought, binary searching on how many can go before the picture
+  changes. The budget bounds SSIM *and* colour: SSIM alone is not enough,
+  because on a nearly flat picture a bare board scores above 0.9 against the
+  target and a pruner given only an SSIM budget hands back an empty frame.
+- **Perceptual weighting** did not pay off here and is off by default. It is
+  available (`--economise`) but unvalidated.
+- **Chord reuse** changed nothing: greedy never wanted to wind a chord twice at
+  these budgets.
+
+One measurement worth recording: at 220px the viewing blur is inactive. A 0.6 m
+frame at 2 m gives a sigma of 0.11 px, and it only reaches 1 px at about 19 m —
+the working resolution is already coarser than the eye. So the lever there is
+*solving smaller*, not blurring the metric.
+
 ## Deliberately not done yet
 
-Thread minimisation. The interesting question — *how little thread can you use
-and still have it look the same?* — needs length-weighted scoring, a penalised
-sparse solve to trace the fidelity/metres Pareto front, backward elimination,
-perceptual rather than L2 error, and Eulerian repair so a selected chord *set*
-can still be wound as one thread. None of that is here. This baseline exists to
-be the thing all of it gets measured against.
+- **The penalised sparse solve.** Greedy still never removes a chord while it is
+  working; only the pruner does, afterwards. For grayscale the problem is
+  exactly convex — one thread colour makes the compositing order-independent and
+  exactly multiplicative, so `-log(C/B)` is linear in the chord counts and it is
+  a non-negative weighted LASSO whose L1 penalty *is* thread length. Colour
+  needs a surrogate plus exact replay.
+- **Continuity repair.** Pruning breaks the walk and the cuts are reported but
+  not repaired. A minimum-weight T-join and Hierholzer would put it back
+  together, and per-colour walks would make a colour piece actually windable.
+- **Parameters as variables** — pin count, thread opacity, palette size chosen
+  for economy rather than only for colour accuracy.
