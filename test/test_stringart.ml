@@ -12,4 +12,5 @@ let () =
       Test_render.suite;
       Test_export.suite;
       Test_economy.suite;
+      Test_sequence.suite;
     ]
