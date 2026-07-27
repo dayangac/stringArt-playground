@@ -75,7 +75,10 @@
     it has placed, and it does not yet account for how much thread each one costs.
     Thread is opaque, so colours mix optically rather than like ink: the palette is
     clustered out of your image in OKLab, and each crossing pulls the board a
-    fraction of the way towards that thread's colour.
+    fraction of the way towards that thread's colour. Matching the board to the
+    image is the cheapest saving there is — thread only has to cover what differs
+    from it. Thread economy then ranks chords by what they buy per metre and drops
+    the ones that stop paying, at the cost of a few cuts.
   </p>
 
   <div class="layout">
@@ -98,6 +101,14 @@
       <div class="field">
         <label for="board">Board colour</label>
         <input type="color" id="board" value="#ffffff">
+        <label style="margin-top:.5rem; text-transform:none; letter-spacing:0">
+          <input type="checkbox" id="auto-board" checked style="width:auto; margin-right:.4rem">
+          Match the board to the image
+        </label>
+      </div>
+      <div class="field">
+        <label for="economy">Thread economy <b id="out-economy"></b></label>
+        <input type="range" id="economy" min="0" max="0.05" step="0.005" value="0.01">
       </div>
       <div class="field">
         <label for="pins">Pins <b id="out-pins"></b></label>
@@ -143,7 +154,7 @@
       <div class="stats">
         <div><span>Chords</span><b id="stat-chords">—</b></div>
         <div><span>Thread</span><b id="stat-thread">—</b></div>
-        <div><span>Target explained</span><b id="stat-match">—</b></div>
+        <div><span>SSIM</span><b id="stat-match">—</b></div>
       </div>
       <p id="status">Pick an image to begin.</p>
       <div class="downloads">
