@@ -47,17 +47,10 @@ let () =
       pins = !pins; max_lines = !lines; opacity = !opacity; board = white }
   in
   let metres px = px *. !diameter /. (2. *. frame.Geometry.r) in
-  let run name ?(prune = 0.) config =
-    let r = Solver.solve ~config ~palette target in
-    let steps, thread_px, cuts =
-      if prune <= 0. then (r.Solver.steps, r.Solver.thread_px, Solver.cuts r.Solver.steps)
-      else
-        let p =
-          Prune.to_budget ~pins:!pins ~palette ~opacity:!opacity ~board:config.Solver.board
-            ~frame ~target ~gains:r.Solver.gains ~sigma ~max_ssim_drop:prune r.Solver.steps
-        in
-        (p.Prune.steps, p.Prune.thread_px, p.Prune.cuts)
-    in
+  let run name ?(prune = 0.) ?(algorithm = Wind.Greedy) ?(lambda = 0.) ?(effort = 8) config =
+    let wound = Wind.solve ~algorithm ~lambda ~effort ~prune ~sigma ~config ~palette target in
+    let steps = wound.Wind.sequence.Sequence.steps in
+    let thread_px = Wind.thread_px wound and cuts = wound.Wind.sequence.Sequence.cuts in
     let out =
       Render.image ~pins:!pins ~palette ~opacity:!opacity ~board:config.Solver.board ~w:!size
         ~h:!size steps
@@ -84,6 +77,15 @@ let () =
       run "all + prune 0.01" ~prune:0.01 economical;
       run "all + prune 0.03" ~prune:0.03 economical;
     ]
+    @ (if !colours > 0 then []
+       else
+         [ run "descent l=0" ~algorithm:Wind.Descent ~effort:6 base;
+           run "descent l=0.1" ~algorithm:Wind.Descent ~lambda:0.1 ~effort:6 base;
+           run "descent l=0.25" ~algorithm:Wind.Descent ~lambda:0.25 ~effort:6 base ])
+    @ (if !colours = 0 then []
+       else
+         [ run "surrogate l=0" ~algorithm:Wind.Surrogate ~effort:20 base;
+           run "surrogate l=0.002" ~algorithm:Wind.Surrogate ~lambda:0.002 ~effort:20 base ])
   in
   let baseline = List.hd rows in
   Printf.printf "palette  %s\nboard    %s (auto)\nviewing  %.1f m, blur sigma %.2f px\n\n"
