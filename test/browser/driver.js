@@ -28,20 +28,21 @@ function darkFraction(canvas) {
   return dark / (px.length / 4);
 }
 
-async function wind(mode) {
+async function wind(mode, algorithm) {
   const t0 = Date.now();
   document.getElementById("mode").value = mode;
+  if (algorithm) document.getElementById("algorithm").value = algorithm;
   document.getElementById("run").click();
   for (let i = 0; i < 200 && document.getElementById("status").textContent !== "Done."; i++) {
     await sleep(100);
   }
   const svg = document.getElementById("dl-svg").getAttribute("href") || "";
   return {
-    mode,
+    mode: mode + (algorithm ? "/" + algorithm : ""),
     ms: Date.now() - t0,
     status: document.getElementById("status").textContent,
     chords: parseInt(document.getElementById("stat-chords").textContent, 10),
-    cuts: document.getElementById("stat-chords").textContent,
+    cuts: parseInt(document.getElementById("stat-cuts").textContent, 10),
     thread: document.getElementById("stat-thread").textContent,
     match: parseFloat(document.getElementById("stat-match").textContent),
     dark: darkFraction(document.getElementById("result")),
@@ -67,6 +68,15 @@ async function wind(mode) {
     document.getElementById("pins").value = "160";
     report.runs.push(await wind("grayscale"));
     report.runs.push(await wind("colour"));
+    // the baseline preset must put every lever back
+    document.getElementById("baseline").click();
+    report.baseline = {
+      algorithm: document.getElementById("algorithm").value,
+      economy: document.getElementById("economy").value,
+      lambda: document.getElementById("lambda").value,
+      board: document.getElementById("board").value,
+      autoBoard: document.getElementById("auto-board").checked,
+    };
     report.ok = true;
   } catch (e) {
     report.error = String((e && e.stack) || e);
