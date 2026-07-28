@@ -20,6 +20,10 @@ let chord_cost = ref 0.
 let windings = ref 1
 let min_gain = ref 0.
 let prune = ref 0.
+let algorithm = ref "greedy"
+let lambda = ref 0.
+let effort = ref 8
+let max_cuts = ref 0
 
 let usage = "stringart <input.ppm> [options]"
 
@@ -36,6 +40,10 @@ let specs =
     ("--windings", Arg.Set_int windings, " how many times one chord may be wound");
     ("--min-gain", Arg.Set_float min_gain, " stop once a chord returns less than this per pixel");
     ("--prune", Arg.Set_float prune, " drop chords until SSIM falls this far (e.g. 0.01)");
+    ("--algorithm", Arg.Set_string algorithm, " greedy (default) | descent | surrogate");
+    ("--lambda", Arg.Set_float lambda, " price of thread, for descent and surrogate");
+    ("--effort", Arg.Set_int effort, " sweeps or iterations for the non-greedy solvers");
+    ("--max-cuts", Arg.Set_int max_cuts, " strands you will accept rather than pay to join");
     ("--pins", Arg.Set_int pins, " number of pins on the frame");
     ("--lines", Arg.Set_int lines, " maximum number of chords");
     ("--opacity", Arg.Set_float opacity, " fraction of a pixel one crossing takes over");
@@ -73,21 +81,28 @@ let () =
       min_gain = !min_gain;
       perceptual = !economise }
   in
-  let t0 = Sys.time () in
-  let res = Solver.solve ~config ~palette target in
+  let chosen =
+    match Wind.of_string !algorithm with
+    | Some a -> a
+    | None ->
+        prerr_endline ("unknown algorithm: " ^ !algorithm);
+        exit 1
+  in
   let sigma = Metrics.viewing_sigma ~diameter_m:!diameter ~distance_m:!distance ~px:!size in
-  let steps, thread_px, cuts =
-    if !prune <= 0. then (res.Solver.steps, res.Solver.thread_px, Solver.cuts res.Solver.steps)
-    else begin
-      let p =
-        Prune.to_budget ~pins:!pins ~palette ~opacity:!opacity ~board ~frame:res.Solver.frame
-          ~target ~gains:res.Solver.gains ~sigma ~max_ssim_drop:!prune res.Solver.steps
-      in
-      Printf.printf "pruned    %d of %d chords\n" p.Prune.dropped (Array.length res.Solver.steps);
-      (p.Prune.steps, p.Prune.thread_px, p.Prune.cuts)
-    end
+  let t0 = Sys.time () in
+  let wound =
+    Wind.solve ~algorithm:chosen ~lambda:!lambda ~effort:!effort ~max_cuts:!max_cuts
+      ~prune:!prune ~sigma ~config ~palette target
   in
   let elapsed = Sys.time () -. t0 in
+  let res = wound.Wind.result in
+  let steps = wound.Wind.sequence.Sequence.steps in
+  let thread_px = Wind.thread_px wound and cuts = wound.Wind.sequence.Sequence.cuts in
+  if wound.Wind.pruned > 0 then
+    Printf.printf "pruned    %d of %d chords\n" wound.Wind.pruned
+      (Array.length res.Solver.steps);
+  Printf.printf "repairs   %d chords to keep it continuous\n"
+    (Array.length wound.Wind.sequence.Sequence.added);
   let k = max 1 !preview_scale in
   let out_size = !size * k in
   Ppm.write !output
@@ -105,6 +120,7 @@ let () =
   end;
   let shown = Render.image ~pins:!pins ~palette ~opacity:!opacity ~board ~w:!size ~h:!size steps in
   let m = Metrics.compare ~sigma ~frame:res.Solver.frame target shown in
+  Printf.printf "algorithm %s\n" (Wind.name chosen);
   Printf.printf "palette   %s\n" (String.concat " " (Palette.names palette));
   Printf.printf "board     %s\n" (Palette.to_hex board);
   Printf.printf "chords    %d (%d cuts)\n" (Array.length steps) cuts;
