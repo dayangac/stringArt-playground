@@ -13,4 +13,5 @@ let () =
       Test_export.suite;
       Test_economy.suite;
       Test_sequence.suite;
+      Test_descent.suite;
     ]
