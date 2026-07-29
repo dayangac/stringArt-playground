@@ -66,7 +66,11 @@ CMY only combines correctly when the layers are transparent.
 | `lib/solver.ml` | greedy chord selection |
 | `lib/render.ml` | wound sequence back to a picture |
 | `lib/metrics.ml` | viewing-distance blur, SSIM, OKLab delta-E |
+| `lib/descent.ml` | convex coordinate descent, one thread colour |
+| `lib/surrogate.ml` | projected gradient over the colour surrogate |
 | `lib/prune.ml` | backward elimination to a fidelity budget |
+| `lib/sequence.ml` | continuity repair: a chord set back into a winding |
+| `lib/wind.ml` | picks the solver and runs solve, prune, sequence |
 | `lib/svg.ml`, `lib/ppm.ml` | exports |
 
 Two consequences worth knowing:
@@ -148,16 +152,63 @@ frame at 2 m gives a sigma of 0.11 px, and it only reaches 1 px at about 19 m �
 the working resolution is already coarser than the eye. So the lever there is
 *solving smaller*, not blurring the metric.
 
+## Three solvers
+
+`Wind.solve` picks one and then runs the same pipeline: **solve, prune, sequence** —
+in that order, because pruning ranks chords by what each bought during the solve
+and knows nothing about the repair chords the sequencer invents.
+
+| | | |
+|---|---|---|
+| `greedy` | the unoptimised baseline | one continuous walk, no knob but stopping early |
+| `descent` | exactly convex, single colour | `lambda` is the price of thread |
+| `surrogate` | projected gradient, colour | `lambda` is the price of thread |
+
+Switch with `--algorithm` on the CLI, the **Solver** dropdown on the page, or
+`Wind.solve ~algorithm`. `bin/bench.exe` runs them all side by side.
+
+**The baseline is never more than a click away.** `Solver.default_config` has
+every lever off and `Wind.Greedy` is the default; a test pins both, field by
+field, so flipping a default has to break something. The page ships with the
+economy levers on, so it also carries a *Reset to the unoptimised baseline*
+button, and the browser test checks that it really does reset them.
+
+Grayscale, 180px, 140 pins, 1200 chords, 0.6 m frame at 2 m:
+
+| variant | metres | vs base | ssim | deltaE | cuts |
+|---|---|---|---|---|---|
+| baseline | 516.2 | — | 0.202 | 0.089 | 0 |
+| all levers + prune 0.03 | 436.8 | −15.4% | 0.197 | 0.107 | 57 |
+| descent, lambda 0 | 494.7 | −4.2% | 0.256 | 0.110 | 0 |
+| descent, lambda 0.1 | 429.8 | −16.7% | 0.261 | 0.123 | 0 |
+| descent, lambda 0.25 | **365.2** | **−29.3%** | 0.264 | 0.142 | 0 |
+
+Descent is the only thing here with a real dial: greedy can only use less
+thread by stopping early, whereas `lambda` prices thread inside the objective
+and lets it put a chord *back*. It buys structure and costs a little colour
+accuracy — reported as it is, not as a win. The surrogate does the same for
+colour but did not beat greedy on the test target (662.6 m against 578.5), and
+that is in the bench for anyone who wants to check.
+
+Both return a chord *set*, so `Sequence` makes it windable again: join the
+pieces with the cheapest chords that link them, then fix parities within each
+piece. It reports the repair thread and the tie-offs separately rather than
+folding them into the total. Colours are wound as separate strands, which is
+why the colour baseline honestly shows four tie-offs for a five-colour palette.
+
 ## Deliberately not done yet
 
-- **The penalised sparse solve.** Greedy still never removes a chord while it is
-  working; only the pruner does, afterwards. For grayscale the problem is
-  exactly convex — one thread colour makes the compositing order-independent and
-  exactly multiplicative, so `-log(C/B)` is linear in the chord counts and it is
-  a non-negative weighted LASSO whose L1 penalty *is* thread length. Colour
-  needs a surrogate plus exact replay.
-- **Continuity repair.** Pruning breaks the walk and the cuts are reported but
-  not repaired. A minimum-weight T-join and Hierholzer would put it back
-  together, and per-colour walks would make a colour piece actually windable.
-- **Parameters as variables** — pin count, thread opacity, palette size chosen
-  for economy rather than only for colour accuracy.
+- **Parameters as decision variables** — pin count, thread opacity and palette
+  size are all levers with real thread consequences, and all are still fixed by
+  hand rather than swept and chosen.
+- **Spatial coherence in colour.** Optical mixing means interleaved colours read
+  as speckle; a term preferring few colours per region should raise *perceived*
+  quality at the same thread.
+- **A palette chosen for economy.** k-means minimises colour distortion, not the
+  coverage the palette will cost.
+- **Layer order.** With per-colour strands the only cross-colour freedom left is
+  the order they go down in, which for six colours is small enough to search
+  exhaustively by exact replay.
+- **The non-greedy solvers in the browser.** They are a second or two natively
+  and correspondingly slower in JS; the page offers them but greedy is the
+  sensible default there.
