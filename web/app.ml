@@ -115,16 +115,16 @@ let wind () =
           scoring = (if economy > 0. then Solver.Per_length else Solver.Absolute);
           chord_cost = economy_chord_cost }
       in
-      let res = Solver.solve ~config ~palette target in
-      let steps, thread_px, cuts =
-        if economy <= 0. then (res.Solver.steps, res.Solver.thread_px, 0)
-        else
-          let p =
-            Prune.to_budget ~pins ~palette ~opacity ~board ~frame ~target ~gains:res.Solver.gains
-              ~max_ssim_drop:economy res.Solver.steps
-          in
-          (p.Prune.steps, p.Prune.thread_px, p.Prune.cuts)
+      let algorithm =
+        match Wind.of_string (str_value "algorithm") with Some a -> a | None -> Wind.Greedy
       in
+      let wound =
+        Wind.solve ~algorithm ~lambda:(float_value "lambda") ~effort:6 ~prune:economy ~config
+          ~palette target
+      in
+      let res = wound.Wind.result in
+      let steps = wound.Wind.sequence.Sequence.steps in
+      let thread_px = Wind.thread_px wound and cuts = wound.Wind.sequence.Sequence.cuts in
       let out = size * preview_scale in
       draw_image (Canvas.of_el (el "result"))
         (Render.image ~pins ~palette ~opacity ~board ~width:(float_of_int preview_scale) ~w:out
@@ -135,9 +135,8 @@ let wind () =
       let metres =
         thread_px *. float_value "diameter" /. (2. *. res.Solver.frame.Geometry.r)
       in
-      set_text "stat-chords"
-        (Printf.sprintf "%d%s" (Array.length steps)
-           (if cuts > 0 then Printf.sprintf " / %d cuts" cuts else ""));
+      set_text "stat-chords" (string_of_int (Array.length steps));
+      set_text "stat-cuts" (string_of_int cuts);
       set_text "stat-thread" (Printf.sprintf "%.0f m" metres);
       set_text "stat-match" (Printf.sprintf "%.3f" m.Metrics.ssim);
       set_download "dl-svg" ~name:"string-art.svg" ~mime:"image/svg+xml"
@@ -178,10 +177,25 @@ let () =
        (fun _ -> match El.Input.files (el "file") with f :: _ -> load_file f | [] -> ())
        (El.as_target (el "file")));
   ignore (Ev.listen Ev.click (fun _ -> wind_later ()) (El.as_target (el "run")));
+  (* One click back to the unoptimised solver, so the baseline every saving is
+     measured against is never more than a click away. *)
+  ignore
+    (Ev.listen Ev.click
+       (fun _ ->
+         set_value "algorithm" "greedy";
+         set_value "economy" "0";
+         set_value "lambda" "0";
+         set_value "board" "#ffffff";
+         El.set_prop El.Prop.checked false (el "auto-board");
+         List.iter (fun (i, o) -> set_text o (str_value i))
+           [ ("economy", "out-economy"); ("lambda", "out-lambda") ];
+         set_text "status" "Back to the plain greedy baseline, white board.")
+       (El.as_target (el "baseline")));
   List.iter
     (fun (input, out) ->
       let sync () = set_text out (str_value input) in
       sync ();
       ignore (Ev.listen Ev.input (fun _ -> sync ()) (El.as_target (el input))))
     [ ("pins", "out-pins"); ("lines", "out-lines"); ("opacity", "out-opacity"); ("size", "out-size");
-      ("gap", "out-gap"); ("colours", "out-colours"); ("economy", "out-economy") ]
+      ("gap", "out-gap"); ("colours", "out-colours"); ("economy", "out-economy");
+      ("lambda", "out-lambda") ]
