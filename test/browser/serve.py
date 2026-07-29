@@ -37,6 +37,10 @@ def check(report):
     problems = []
     if not report.get("ok"):
         problems.append("driver failed: %s" % report.get("error"))
+    b = report.get("baseline") or {}
+    if b.get("algorithm") != "greedy" or float(b.get("economy", 1)) != 0 \
+            or float(b.get("lambda", 1)) != 0 or b.get("board") != "#ffffff" or b.get("autoBoard"):
+        problems.append("baseline preset did not reset the levers: %s" % b)
     runs = {r["mode"]: r for r in report.get("runs", [])}
     for mode in ("grayscale", "colour"):
         r = runs.get(mode)
