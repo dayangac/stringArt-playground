@@ -77,6 +77,15 @@ async function wind(mode, algorithm) {
       board: document.getElementById("board").value,
       autoBoard: document.getElementById("auto-board").checked,
     };
+    // the whole app has to sit on one screen, at a plain laptop size
+    const doc = document.documentElement;
+    report.layout = {
+      scrollHeight: doc.scrollHeight,
+      innerHeight: window.innerHeight,
+      scrollWidth: doc.scrollWidth,
+      innerWidth: window.innerWidth,
+      resultVisible: document.getElementById("result").getBoundingClientRect().bottom,
+    };
     report.ok = true;
   } catch (e) {
     report.error = String((e && e.stack) || e);
