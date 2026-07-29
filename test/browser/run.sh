@@ -23,6 +23,7 @@ sed 's#</body>#<script src="driver.js"></script></body>#' _build/default/web/ind
 (
   sleep 2
   "$CHROME" --headless=new --disable-gpu --no-first-run --no-default-browser-check \
+    --window-size=${WINDOW:-1440,900} \
     --user-data-dir="$PROFILE" "http://127.0.0.1:$PORT/index.html" >/dev/null 2>&1
 ) &
 CHROME_PID=$!
