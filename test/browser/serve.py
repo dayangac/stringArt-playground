@@ -37,6 +37,19 @@ def check(report):
     problems = []
     if not report.get("ok"):
         problems.append("driver failed: %s" % report.get("error"))
+    lay = report.get("layout") or {}
+    if not lay:
+        problems.append("no layout report")
+    else:
+        if lay["scrollHeight"] > lay["innerHeight"] + 1:
+            problems.append("page scrolls vertically: %s content in a %s viewport"
+                            % (lay["scrollHeight"], lay["innerHeight"]))
+        if lay["scrollWidth"] > lay["innerWidth"] + 1:
+            problems.append("page scrolls horizontally: %s content in a %s viewport"
+                            % (lay["scrollWidth"], lay["innerWidth"]))
+        if lay["resultVisible"] > lay["innerHeight"] + 1:
+            problems.append("the wound canvas is cut off at the bottom (%s > %s)"
+                            % (lay["resultVisible"], lay["innerHeight"]))
     b = report.get("baseline") or {}
     if b.get("algorithm") != "greedy" or float(b.get("economy", 1)) != 0 \
             or float(b.get("lambda", 1)) != 0 or b.get("board") != "#ffffff" or b.get("autoBoard"):
@@ -95,4 +108,8 @@ if problems:
     trimmed["runs"] = [{k: v for k, v in r.items() if k != "png"} for r in report.get("runs", [])]
     print(json.dumps(trimmed, indent=2)[:2000])
     sys.exit(1)
+lay = report.get("layout") or {}
+print("  layout    %sx%s of content in a %sx%s viewport"
+      % (lay.get("scrollWidth"), lay.get("scrollHeight"),
+         lay.get("innerWidth"), lay.get("innerHeight")))
 print("browser test passed")
