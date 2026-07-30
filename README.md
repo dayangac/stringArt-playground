@@ -15,6 +15,11 @@ dune build @default
 python3 -m http.server -d _build/default/web 8000   # then open localhost:8000
 ```
 
+The page is a fixed-height shell: controls, both canvases, the palette and the
+numbers all sit in one viewport with nothing to scroll. The browser test
+measures that rather than trusting it -- it fails if the document is taller
+than the window, or if the wound canvas is cut off at the bottom.
+
 Command line, for batch work and for looking at numbers:
 
 ```sh
