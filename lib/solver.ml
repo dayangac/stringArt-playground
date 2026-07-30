@@ -113,7 +113,35 @@ let perceptual_weights t3 ~npix =
   let mean = !total /. float_of_int npix in
   if mean > 0. then Array.map (fun v -> v /. mean) g else g
 
-let solve ?(config = default_config) ?(palette = Palette.grayscale) img =
+(* The winding, as a mutable state you can push chords onto and pop them off
+   again. Greedy only ever pushes, but an algorithm that wants to reconsider a
+   run of chords needs to put the picture back exactly as it was -- and it can,
+   because a crossing C <- C + b(c - C) inverts to C <- (C - b*c)/(1 - b), and
+   undoing along the chord in reverse touches every pixel in the reverse order
+   it was touched. *)
+type engine = {
+  cfg : config;
+  colour : float array array;
+  cnorm2 : float array;
+  frame : Geometry.t;
+  w : int;
+  h : int;
+  px : float array;
+  py : float array;
+  len_by_gap : float array;
+  t3 : float array;
+  g : float array;
+  c3 : float array;
+  we3 : float array;
+  wc3 : float array;
+  wec : float array;
+  wcc : float array;
+  wound : Bytes.t;
+  cap : int;
+  mutable err : float;
+}
+
+let engine ?(config = default_config) ?(palette = Palette.grayscale) img =
   let nthreads = Array.length palette in
   if nthreads = 0 then invalid_arg "Solver.solve: empty palette";
   if config.max_lines < 0 then invalid_arg "Solver.solve: negative max_lines";
@@ -123,8 +151,6 @@ let solve ?(config = default_config) ?(palette = Palette.grayscale) img =
   let npix = w * h in
   let t3 = target img frame ~board:config.board in
   let g = if config.perceptual then perceptual_weights t3 ~npix else Array.make npix 1. in
-  (* canvas, plus the weighted quantities the scoring loop would otherwise have
-     to recompute for every candidate chord *)
   let c3 = Array.make (npix * Image.channels) 0. in
   let we3 = Array.make (npix * Image.channels) 0. in
   let wc3 = Array.make (npix * Image.channels) 0. in
@@ -147,112 +173,184 @@ let solve ?(config = default_config) ?(palette = Palette.grayscale) img =
     wec.(p) <- gp *. !a;
     wcc.(p) <- gp *. !b
   done;
-  let initial_error = !err in
-  let px = Array.init config.pins (fun i -> fst (Geometry.pin frame i)) in
-  let py = Array.init config.pins (fun i -> snd (Geometry.pin frame i)) in
-  (* every chord spanning the same number of pins has the same length *)
-  let len_by_gap = Array.init ((config.pins / 2) + 1) (fun d -> Geometry.chord_length frame 0 d) in
-  let colour = Array.map (fun (t : Palette.thread) -> t.Palette.color) palette in
-  let cnorm2 =
-    Array.map (fun c -> (c.(0) *. c.(0)) +. (c.(1) *. c.(1)) +. (c.(2) *. c.(2))) colour
-  in
-  let cap = min 255 config.max_windings in
-  let wound = Bytes.make (config.pins * config.pins * nthreads) '\000' in
-  let key a b k = ((((min a b) * config.pins) + max a b) * nthreads) + k in
-  let alpha = config.opacity in
-  let a2 = alpha *. alpha in
-  let thread_px = ref 0. in
-  let steps = ref [] and gains = ref [] and count = ref 0 and cur = ref config.start_pin in
+  { cfg = config;
+    colour = Array.map (fun (t : Palette.thread) -> t.Palette.color) palette;
+    cnorm2 =
+      Array.map
+        (fun (t : Palette.thread) ->
+          let c = t.Palette.color in
+          (c.(0) *. c.(0)) +. (c.(1) *. c.(1)) +. (c.(2) *. c.(2)))
+        palette;
+    frame;
+    w;
+    h;
+    px = Array.init config.pins (fun i -> fst (Geometry.pin frame i));
+    py = Array.init config.pins (fun i -> snd (Geometry.pin frame i));
+    len_by_gap = Array.init ((config.pins / 2) + 1) (fun d -> Geometry.chord_length frame 0 d);
+    t3;
+    g;
+    c3;
+    we3;
+    wc3;
+    wec;
+    wcc;
+    wound = Bytes.make (config.pins * config.pins * Array.length palette) '\000';
+    cap = min 255 config.max_windings;
+    err = !err }
+
+let error e = e.err
+let frame e = e.frame
+
+let key e a b k =
+  let n = Array.length e.colour in
+  ((((min a b) * e.cfg.pins) + max a b) * n) + k
+
+let windings e a b k = Char.code (Bytes.get e.wound (key e a b k))
+
+(* One traversal per chord yields, for every thread at once, the error change
+   of laying that thread along it. Expanding sum g|err + a(colour - C)|^2
+   leaves only these five sums depending on the chord rather than the colour. *)
+let score_chord e ~from ~to_ f =
+  let gap = Geometry.pin_gap e.frame from to_ in
+  if gap >= max 1 e.cfg.min_gap then begin
+    let se0 = ref 0. and se1 = ref 0. and se2 = ref 0. in
+    let sc0 = ref 0. and sc1 = ref 0. and sc2 = ref 0. in
+    let sec = ref 0. and scc = ref 0. and sg = ref 0. in
+    Raster.iter_nearest ~stride:score_stride ~w:e.w ~h:e.h e.px.(from) e.py.(from) e.px.(to_)
+      e.py.(to_) (fun p ->
+        let o = p * Image.channels in
+        se0 := !se0 +. e.we3.(o);
+        se1 := !se1 +. e.we3.(o + 1);
+        se2 := !se2 +. e.we3.(o + 2);
+        sc0 := !sc0 +. e.wc3.(o);
+        sc1 := !sc1 +. e.wc3.(o + 1);
+        sc2 := !sc2 +. e.wc3.(o + 2);
+        sec := !sec +. e.wec.(p);
+        scc := !scc +. e.wcc.(p);
+        sg := !sg +. e.g.(p));
+    let alpha = e.cfg.opacity in
+    let a2 = alpha *. alpha in
+    let base = (2. *. alpha *. !sec) -. (a2 *. !scc) in
+    let cost = e.len_by_gap.(gap) +. e.cfg.chord_cost in
+    for k = 0 to Array.length e.colour - 1 do
+      if windings e from to_ k < e.cap then begin
+        let c = e.colour.(k) in
+        let se_c = (!se0 *. c.(0)) +. (!se1 *. c.(1)) +. (!se2 *. c.(2)) in
+        let sc_c = (!sc0 *. c.(0)) +. (!sc1 *. c.(1)) +. (!sc2 *. c.(2)) in
+        let gain =
+          base -. (2. *. alpha *. se_c) +. (2. *. a2 *. sc_c) -. (a2 *. !sg *. e.cnorm2.(k))
+        in
+        let score = match e.cfg.scoring with Absolute -> gain | Per_length -> gain /. cost in
+        (* worth winding at all, and still worth the thread it costs *)
+        if gain > 0. && gain /. cost > e.cfg.min_gain then f k score
+      end
+    done
+  end
+
+(* The single best chord out of [from], or none if nothing is worth winding. *)
+let best e ~from =
+  let to_ = ref (-1) and thread = ref (-1) and top = ref neg_infinity in
+  for j = 0 to e.cfg.pins - 1 do
+    score_chord e ~from ~to_:j (fun k score ->
+        if score > !top then begin
+          top := score;
+          to_ := j;
+          thread := k
+        end)
+  done;
+  if !to_ < 0 then None else Some (!to_, !thread)
+
+(* The [count] best chords out of [from], best first. Used by algorithms that
+   want to try more than the obvious move. *)
+let choices e ~from ~count =
+  let all = ref [] in
+  for j = 0 to e.cfg.pins - 1 do
+    score_chord e ~from ~to_:j (fun k score -> all := (score, j, k) :: !all)
+  done;
+  let ranked = List.sort (fun (a, _, _) (b, _, _) -> compare b a) !all in
+  let rec take n = function [] -> [] | x :: r -> if n <= 0 then [] else x :: take (n - 1) r in
+  List.map (fun (_, j, k) -> (j, k)) (take count ranked)
+
+(* Lay a chord down, anti-aliased, keeping the error exact: a pixel can be
+   touched more than once by the same chord. Returns what it bought. *)
+let apply e ~from ~to_ ~thread =
+  let c = e.colour.(thread) in
+  let before = e.err in
+  let alpha = e.cfg.opacity in
+  Raster.iter ~w:e.w ~h:e.h e.px.(from) e.py.(from) e.px.(to_) e.py.(to_) (fun p wgt ->
+      let o = p * Image.channels in
+      let beta = alpha *. wgt in
+      let gp = e.g.(p) in
+      let a = ref 0. and b = ref 0. in
+      for ch = 0 to Image.channels - 1 do
+        let old = e.c3.(o + ch) in
+        let nv = old +. (beta *. (c.(ch) -. old)) in
+        let e_old = old -. e.t3.(o + ch) and e_new = nv -. e.t3.(o + ch) in
+        e.c3.(o + ch) <- nv;
+        e.we3.(o + ch) <- gp *. e_new;
+        e.wc3.(o + ch) <- gp *. nv;
+        e.err <- e.err +. (gp *. ((e_new *. e_new) -. (e_old *. e_old)));
+        a := !a +. (e_new *. nv);
+        b := !b +. (nv *. nv)
+      done;
+      e.wec.(p) <- gp *. !a;
+      e.wcc.(p) <- gp *. !b);
+  let idx = key e from to_ thread in
+  Bytes.set e.wound idx (Char.chr (Char.code (Bytes.get e.wound idx) + 1));
+  before -. e.err
+
+(* Take the last chord back off again. Traversing from the far end visits every
+   pixel in the reverse order [apply] did, which is what makes this exact. *)
+let undo e ~from ~to_ ~thread =
+  let c = e.colour.(thread) in
+  let alpha = e.cfg.opacity in
+  Raster.iter ~w:e.w ~h:e.h e.px.(to_) e.py.(to_) e.px.(from) e.py.(from) (fun p wgt ->
+      let o = p * Image.channels in
+      let beta = alpha *. wgt in
+      let gp = e.g.(p) in
+      let a = ref 0. and b = ref 0. in
+      for ch = 0 to Image.channels - 1 do
+        let nv = e.c3.(o + ch) in
+        let old = if beta >= 1. then nv else (nv -. (beta *. c.(ch))) /. (1. -. beta) in
+        let e_old = old -. e.t3.(o + ch) and e_new = nv -. e.t3.(o + ch) in
+        e.c3.(o + ch) <- old;
+        e.we3.(o + ch) <- gp *. e_old;
+        e.wc3.(o + ch) <- gp *. old;
+        e.err <- e.err +. (gp *. ((e_old *. e_old) -. (e_new *. e_new)));
+        a := !a +. (e_old *. old);
+        b := !b +. (old *. old)
+      done;
+      e.wec.(p) <- gp *. !a;
+      e.wcc.(p) <- gp *. !b);
+  let idx = key e from to_ thread in
+  let n = Char.code (Bytes.get e.wound idx) in
+  if n > 0 then Bytes.set e.wound idx (Char.chr (n - 1))
+
+let chord_px e ~from ~to_ = e.len_by_gap.(Geometry.pin_gap e.frame from to_)
+
+let solve ?(config = default_config) ?(palette = Palette.grayscale) img =
+  let e = engine ~config ~palette img in
+  let initial_error = e.err in
+  let steps = ref [] and gains = ref [] and thread_px = ref 0. in
+  let count = ref 0 and cur = ref config.start_pin in
   (try
      while !count < config.max_lines do
-       (* One traversal per chord yields, for every thread at once, the exact
-          error change of laying that thread along it. Expanding
-          sum g|e + a(colour - C)|^2 leaves only these five sums depending on
-          the chord rather than on the colour. *)
-       let best = ref (-1) and best_k = ref (-1) in
-       let best_score = ref neg_infinity in
-       for j = 0 to config.pins - 1 do
-         let gap = Geometry.pin_gap frame !cur j in
-         if gap >= max 1 config.min_gap then begin
-           let se0 = ref 0. and se1 = ref 0. and se2 = ref 0. in
-           let sc0 = ref 0. and sc1 = ref 0. and sc2 = ref 0. in
-           let sec = ref 0. and scc = ref 0. and sg = ref 0. in
-           Raster.iter_nearest ~stride:score_stride ~w ~h px.(!cur) py.(!cur) px.(j) py.(j)
-             (fun p ->
-               let o = p * Image.channels in
-               se0 := !se0 +. we3.(o);
-               se1 := !se1 +. we3.(o + 1);
-               se2 := !se2 +. we3.(o + 2);
-               sc0 := !sc0 +. wc3.(o);
-               sc1 := !sc1 +. wc3.(o + 1);
-               sc2 := !sc2 +. wc3.(o + 2);
-               sec := !sec +. wec.(p);
-               scc := !scc +. wcc.(p);
-               sg := !sg +. g.(p));
-           let base = (2. *. alpha *. !sec) -. (a2 *. !scc) in
-           let cost = len_by_gap.(gap) +. config.chord_cost in
-           for k = 0 to nthreads - 1 do
-             if Char.code (Bytes.get wound (key !cur j k)) < cap then begin
-               let c = colour.(k) in
-               let se_c = (!se0 *. c.(0)) +. (!se1 *. c.(1)) +. (!se2 *. c.(2)) in
-               let sc_c = (!sc0 *. c.(0)) +. (!sc1 *. c.(1)) +. (!sc2 *. c.(2)) in
-               let gain =
-                 base -. (2. *. alpha *. se_c) +. (2. *. a2 *. sc_c)
-                 -. (a2 *. !sg *. cnorm2.(k))
-               in
-               let score =
-                 match config.scoring with Absolute -> gain | Per_length -> gain /. cost
-               in
-               (* worth winding at all, and still worth the thread it costs *)
-               if gain > 0. && gain /. cost > config.min_gain && score > !best_score then begin
-                 best_score := score;
-                 best := j;
-                 best_k := k
-               end
-             end
-           done
-         end
-       done;
-       if !best < 0 then raise Exit;
-       let j = !best and k = !best_k in
-       let c = colour.(k) in
-       (* Lay it down anti-aliased, keeping the error exact as we go: a pixel
-          can be touched more than once by the same chord. What the chord
-          actually bought is the exact change in error, not the strided
-          estimate the ranking used, so that pruning later ranks on the truth. *)
-       let before = !err in
-       Raster.iter ~w ~h px.(!cur) py.(!cur) px.(j) py.(j) (fun p wgt ->
-           let o = p * Image.channels in
-           let beta = alpha *. wgt in
-           let gp = g.(p) in
-           let a = ref 0. and b = ref 0. in
-           for ch = 0 to Image.channels - 1 do
-             let old = c3.(o + ch) in
-             let nv = old +. (beta *. (c.(ch) -. old)) in
-             let e_old = old -. t3.(o + ch) and e_new = nv -. t3.(o + ch) in
-             c3.(o + ch) <- nv;
-             we3.(o + ch) <- gp *. e_new;
-             wc3.(o + ch) <- gp *. nv;
-             err := !err +. (gp *. ((e_new *. e_new) -. (e_old *. e_old)));
-             a := !a +. (e_new *. nv);
-             b := !b +. (nv *. nv)
-           done;
-           wec.(p) <- gp *. !a;
-           wcc.(p) <- gp *. !b);
-       let idx = key !cur j k in
-       Bytes.set wound idx (Char.chr (Char.code (Bytes.get wound idx) + 1));
-       steps := { a = !cur; b = j; thread = k } :: !steps;
-       gains := (before -. !err) :: !gains;
-       thread_px := !thread_px +. len_by_gap.(Geometry.pin_gap frame !cur j);
-       incr count;
-       cur := j
+       match best e ~from:!cur with
+       | None -> raise Exit
+       | Some (to_, thread) ->
+           let gain = apply e ~from:!cur ~to_ ~thread in
+           steps := { a = !cur; b = to_; thread } :: !steps;
+           gains := gain :: !gains;
+           thread_px := !thread_px +. chord_px e ~from:!cur ~to_;
+           incr count;
+           cur := to_
      done
    with Exit -> ());
   { steps = Array.of_list (List.rev !steps);
     gains = Array.of_list (List.rev !gains);
-    frame;
+    frame = e.frame;
     initial_error;
-    final_error = !err;
+    final_error = e.err;
     thread_px = !thread_px }
 
 (* Thread actually consumed, given the diameter of the physical frame. *)
