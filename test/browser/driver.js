@@ -74,9 +74,10 @@ async function wind(mode, algorithm) {
       algorithm: document.getElementById("algorithm").value,
       economy: document.getElementById("economy").value,
       lambda: document.getElementById("lambda").value,
-      board: document.getElementById("board").value,
-      autoBoard: document.getElementById("auto-board").checked,
     };
+    // no board control should be left on the page
+    report.noBoardControl =
+      !document.getElementById("board") && !document.getElementById("auto-board");
     // the whole app has to sit on one screen, at a plain laptop size
     const doc = document.documentElement;
     report.layout = {
