@@ -11,13 +11,15 @@
 
 type algorithm =
   | Greedy (* the unoptimised baseline *)
+  | Lookahead (* greedy with a two-chord horizon *)
   | Descent (* convex coordinate descent, single colour only *)
   | Surrogate (* projected gradient on the colour surrogate *)
 
-let all = [ Greedy; Descent; Surrogate ]
+let all = [ Greedy; Lookahead; Descent; Surrogate ]
 
 let name = function
   | Greedy -> "greedy"
+  | Lookahead -> "lookahead"
   | Descent -> "descent"
   | Surrogate -> "surrogate"
 
@@ -42,6 +44,7 @@ let solve ?(algorithm = Greedy) ?(lambda = 0.) ?(effort = 8) ?(max_cuts = 0) ?(p
   let result =
     match algorithm with
     | Greedy -> Solver.solve ~config ~palette img
+    | Lookahead -> Lookahead.solve ~config ~palette ~width:effort img
     | Descent -> Descent.solve ~config ~palette ~lambda ~sweeps:effort img
     | Surrogate -> Surrogate.solve ~config ~palette ~lambda ~iters:effort img
   in
