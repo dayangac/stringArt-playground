@@ -15,6 +15,19 @@
    So the surrogate is what the optimiser searches, and the exact compositing
    is what the answer is scored by. A search device, never a reporting one.
 
+   Optimising the surrogate harder is not the same as getting a better picture:
+   past a point the search drifts towards what the approximation likes rather
+   than what the compositing actually does, and the exact error starts climbing
+   again. So the run is scored by exact replay at checkpoints and hands back the
+   best of those, never merely the last.
+
+   It starts from the greedy winding rather than from a bare frame. Left to
+   build from nothing every chord count creeps up together from zero, and none
+   of them crosses a whole winding until twenty-odd iterations in -- so a short
+   run returned an empty frame and called it done. Starting from a real answer
+   means the gradient refines something instead of inventing it, and the result
+   can never be worse than the winding it began with.
+
    Like [Descent] this returns a chord set rather than a walk; [Sequence] makes
    it windable. *)
 
@@ -52,6 +65,14 @@ let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lam
   let slot i j c = (chord i j * k) + c in
   let x = Array.make (pins * pins * k) 0. in
   let cap = float_of_int (max 1 config.Solver.max_windings) in
+  (* warm start: whatever greedy made of it *)
+  let seed = Solver.solve ~config ~palette img in
+  Array.iter
+    (fun (st : Solver.step) ->
+      let i = min st.Solver.a st.Solver.b and j = max st.Solver.a st.Solver.b in
+      let idx = (((i * pins) + j) * k) + st.Solver.thread in
+      x.(idx) <- Float.min cap (x.(idx) +. 1.))
+    seed.Solver.steps;
   let price i j = lambda *. (len_by_gap.(Geometry.pin_gap frame i j) +. config.Solver.chord_cost) in
   let work =
     { n = Array.make npix 0.;
@@ -157,11 +178,63 @@ let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lam
       done
     done
   in
+  (* Round to whole windings, biggest first, and honour the chord budget. *)
+  let crystallise (x : float array) =
+    let wound = ref [] in
+    for i = 0 to pins - 1 do
+      for j = i + 1 to pins - 1 do
+        for t = 0 to k - 1 do
+          let n = int_of_float (Float.round x.(slot i j t)) in
+          if n > 0 then wound := (x.(slot i j t), i, j, t, n) :: !wound
+        done
+      done
+    done;
+    let wound = List.sort (fun (a, _, _, _, _) (b, _, _, _, _) -> compare b a) !wound in
+    let steps = ref [] and count = ref 0 in
+    List.iter
+      (fun (_, i, j, t, n) ->
+        for _ = 1 to n do
+          if !count < config.Solver.max_lines then begin
+            steps := { Solver.a = i; b = j; thread = t } :: !steps;
+            incr count
+          end
+        done)
+      wound;
+    Array.of_list (List.rev !steps)
+  in
+  (* Score by the real thing, not by the surrogate that found it. *)
+  let err steps =
+    let r = Render.image ~pins ~palette ~opacity:alpha ~board ~w ~h steps in
+    let acc = ref 0. in
+    for p = 0 to npix - 1 do
+      let o = p * Image.channels in
+      for ch = 0 to Image.channels - 1 do
+        let d = r.Image.data.{o + ch} -. t3.(o + ch) in
+        acc := !acc +. (g.(p) *. d *. d)
+      done
+    done;
+    !acc
+  in
   let objective = ref (forward x +. penalty x) in
   let trial = Array.make (Array.length x) 0. in
   let step = ref 0. in
+  (* Keep the best winding seen, the greedy seed included. Crystallising loses
+     the order the seed was wound in, and order matters to the compositing, so
+     the seed has to be in the running on its own terms or a run that improves
+     nothing could still hand back something slightly worse. *)
+  let best_steps = ref seed.Solver.steps and best_exact = ref (err seed.Solver.steps) in
+  let checkpoint () =
+    let st = crystallise x in
+    let e = err st in
+    if e < !best_exact then begin
+      best_exact := e;
+      best_steps := st
+    end
+  in
+  let every = max 1 (iters / 5) in
   (try
-     for _ = 1 to iters do
+     checkpoint ();
+     for n = 1 to iters do
        gradient ();
        if !step <= 0. then begin
          let peak = Array.fold_left (fun a v -> Float.max a (Float.abs v)) 0. grad in
@@ -185,45 +258,13 @@ let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lam
            incr tries
          end
        done;
-       if not !accepted then raise Exit
+       if not !accepted then raise Exit;
+       if n mod every = 0 || n = iters then checkpoint ()
      done
    with Exit -> ());
-  (* Round to whole windings, biggest first, and honour the chord budget. *)
-  let wound = ref [] in
-  for i = 0 to pins - 1 do
-    for j = i + 1 to pins - 1 do
-      for t = 0 to k - 1 do
-        let n = int_of_float (Float.round x.(slot i j t)) in
-        if n > 0 then wound := (x.(slot i j t), i, j, t, n) :: !wound
-      done
-    done
-  done;
-  let wound = List.sort (fun (a, _, _, _, _) (b, _, _, _, _) -> compare b a) !wound in
-  let steps = ref [] and count = ref 0 in
-  List.iter
-    (fun (_, i, j, t, n) ->
-      for _ = 1 to n do
-        if !count < config.Solver.max_lines then begin
-          steps := { Solver.a = i; b = j; thread = t } :: !steps;
-          incr count
-        end
-      done)
-    wound;
-  let steps = Array.of_list (List.rev !steps) in
-  (* Score by the real thing, not by the surrogate that found it. *)
-  let err steps =
-    let r = Render.image ~pins ~palette ~opacity:alpha ~board ~w ~h steps in
-    let acc = ref 0. in
-    for p = 0 to npix - 1 do
-      let o = p * Image.channels in
-      for ch = 0 to Image.channels - 1 do
-        let d = r.Image.data.{o + ch} -. t3.(o + ch) in
-        acc := !acc +. (g.(p) *. d *. d)
-      done
-    done;
-    !acc
-  in
-  let final = err steps in
+  checkpoint ();
+  let steps = !best_steps in
+  let final = !best_exact in
   let gains =
     (* what each chord bought, measured against the same surrogate the search
        used, so the pruner has something to rank on *)
