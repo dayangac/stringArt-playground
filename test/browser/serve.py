@@ -52,8 +52,10 @@ def check(report):
                             % (lay["resultVisible"], lay["innerHeight"]))
     b = report.get("baseline") or {}
     if b.get("algorithm") != "greedy" or float(b.get("economy", 1)) != 0 \
-            or float(b.get("lambda", 1)) != 0 or b.get("board") != "#ffffff" or b.get("autoBoard"):
+            or float(b.get("lambda", 1)) != 0:
         problems.append("baseline preset did not reset the levers: %s" % b)
+    if not report.get("noBoardControl"):
+        problems.append("the board colour control is still on the page")
     runs = {r["mode"]: r for r in report.get("runs", [])}
     for mode in ("grayscale", "colour"):
         r = runs.get(mode)
