@@ -16,7 +16,6 @@ let el id =
 let str_value id = Jstr.to_string (El.prop El.Prop.value (el id))
 let int_value id = int_of_string (str_value id)
 let float_value id = float_of_string (str_value id)
-let is_checked id = El.prop El.Prop.checked (el id)
 let set_value id v = El.set_prop El.Prop.value (Jstr.v v) (el id)
 let set_text id s = El.set_children (el id) [ El.txt' s ]
 
@@ -97,14 +96,7 @@ let wind () =
         if colours > 0 then Palette.of_image ~k:colours target frame else Palette.grayscale
       in
       let economy = float_value "economy" in
-      let board =
-        if is_checked "auto-board" then begin
-          let b = Palette.best_board palette target frame in
-          set_value "board" (Palette.to_hex b);
-          b
-        end
-        else (Palette.of_hex (str_value "board")).Palette.color
-      in
+      let board = Solver.default_config.Solver.board in
       let config =
         { Solver.default_config with
           pins;
@@ -119,8 +111,8 @@ let wind () =
         match Wind.of_string (str_value "algorithm") with Some a -> a | None -> Wind.Greedy
       in
       let wound =
-        Wind.solve ~algorithm ~lambda:(float_value "lambda") ~effort:6 ~prune:economy ~config
-          ~palette target
+        Wind.solve ~algorithm ~lambda:(float_value "lambda") ~effort:(int_value "effort")
+          ~prune:economy ~config ~palette target
       in
       let res = wound.Wind.result in
       let steps = wound.Wind.sequence.Sequence.steps in
@@ -177,6 +169,10 @@ let () =
        (fun _ -> match El.Input.files (el "file") with f :: _ -> load_file f | [] -> ())
        (El.as_target (el "file")));
   ignore (Ev.listen Ev.click (fun _ -> wind_later ()) (El.as_target (el "run")));
+  (* A reload can leave a file sitting in the input from the previous visit --
+     Firefox restores form state -- with no change event ever having fired. The
+     page then looks loaded and is not, so pick it up on the way in. *)
+  (match El.Input.files (el "file") with f :: _ -> load_file f | [] -> ());
   (* One click back to the unoptimised solver, so the baseline every saving is
      measured against is never more than a click away. *)
   ignore
@@ -185,11 +181,9 @@ let () =
          set_value "algorithm" "greedy";
          set_value "economy" "0";
          set_value "lambda" "0";
-         set_value "board" "#ffffff";
-         El.set_prop El.Prop.checked false (el "auto-board");
          List.iter (fun (i, o) -> set_text o (str_value i))
            [ ("economy", "out-economy"); ("lambda", "out-lambda") ];
-         set_text "status" "Back to the plain greedy baseline, white board.")
+         set_text "status" "Back to the plain greedy baseline.")
        (El.as_target (el "baseline")));
   List.iter
     (fun (input, out) ->
@@ -198,4 +192,4 @@ let () =
       ignore (Ev.listen Ev.input (fun _ -> sync ()) (El.as_target (el input))))
     [ ("pins", "out-pins"); ("lines", "out-lines"); ("opacity", "out-opacity"); ("size", "out-size");
       ("gap", "out-gap"); ("colours", "out-colours"); ("economy", "out-economy");
-      ("lambda", "out-lambda") ]
+      ("lambda", "out-lambda"); ("effort", "out-effort") ]
