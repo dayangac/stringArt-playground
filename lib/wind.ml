@@ -46,7 +46,9 @@ let solve ?(algorithm = Greedy) ?(lambda = 0.) ?(effort = 8) ?(max_cuts = 0) ?(p
     | Greedy -> Solver.solve ~config ~palette img
     | Lookahead -> Lookahead.solve ~config ~palette ~width:effort img
     | Descent -> Descent.solve ~config ~palette ~lambda ~sweeps:effort img
-    | Surrogate -> Surrogate.solve ~config ~palette ~lambda ~iters:effort img
+    (* effort means candidates to lookahead and sweeps to descent, but the
+       surrogate counts gradient steps and wants far more of them *)
+    | Surrogate -> Surrogate.solve ~config ~palette ~lambda ~iters:(effort * 5) img
   in
   let kept, pruned, kept_px =
     if prune <= 0. then (result.Solver.steps, 0, result.Solver.thread_px)
