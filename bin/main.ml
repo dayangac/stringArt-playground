@@ -13,8 +13,6 @@ let size = ref 300
 let preview_scale = ref 3
 let diameter = ref 0.6
 let distance = ref 2.0
-let board = ref "#ffffff"
-let auto_board = ref false
 let economise = ref false
 let chord_cost = ref 0.
 let windings = ref 1
@@ -33,8 +31,6 @@ let specs =
     ("--svg", Arg.Set_string svg_out, " also write an SVG");
     ("--seq", Arg.Set_string seq_out, " also write the winding instructions");
     ("--colors", Arg.Set_int colours, " wind in N colours taken from the image (0 = black only)");
-    ("--board", Arg.Set_string board, " board colour as #rrggbb (default white)");
-    ("--auto-board", Arg.Set auto_board, " start from the picture's dominant colour");
     ("--economise", Arg.Set economise, " rank chords by error reduction per metre, and weight the error perceptually");
     ("--chord-cost", Arg.Set_float chord_cost, " fixed cost per chord, in pixels of thread");
     ("--windings", Arg.Set_int windings, " how many times one chord may be wound");
@@ -64,10 +60,7 @@ let () =
   let palette =
     if !colours > 0 then Palette.of_image ~k:!colours target frame else Palette.grayscale
   in
-  let board =
-    if !auto_board then Palette.best_board palette target frame
-    else (Palette.of_hex !board).Palette.color
-  in
+  let board = Solver.default_config.Solver.board in
   let config =
     { Solver.default_config with
       pins = !pins;
@@ -122,7 +115,6 @@ let () =
   let m = Metrics.compare ~sigma ~frame:res.Solver.frame target shown in
   Printf.printf "algorithm %s\n" (Wind.name chosen);
   Printf.printf "palette   %s\n" (String.concat " " (Palette.names palette));
-  Printf.printf "board     %s\n" (Palette.to_hex board);
   Printf.printf "chords    %d (%d cuts)\n" (Array.length steps) cuts;
   Printf.printf "thread    %.1f m (frame %.2f m across)\n"
     (thread_px *. !diameter /. (2. *. res.Solver.frame.Geometry.r))
