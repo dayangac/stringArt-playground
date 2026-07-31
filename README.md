@@ -71,6 +71,7 @@ CMY only combines correctly when the layers are transparent.
 | `lib/solver.ml` | greedy chord selection |
 | `lib/render.ml` | wound sequence back to a picture |
 | `lib/metrics.ml` | viewing-distance blur, SSIM, OKLab delta-E |
+| `lib/lookahead.ml` | greedy with a two-chord horizon |
 | `lib/descent.ml` | convex coordinate descent, one thread colour |
 | `lib/surrogate.ml` | projected gradient over the colour surrogate |
 | `lib/prune.ml` | backward elimination to a fidelity budget |
@@ -116,30 +117,27 @@ OKLab lightness plus mean OKLab delta-E, both taken through a blur derived from
 one arcminute of acuity at the intended viewing distance.
 
 `dune exec bin/bench.exe -- image.ppm` runs every lever against the baseline.
-On a fox-like target, 220px working resolution, 180 pins, 1500 chords, six
+On a fox-like target, 180px working resolution, 140 pins, 1200 chords, six
 colours, a 0.6 m frame seen from 2 m:
 
 | variant | metres | vs base | ssim | deltaE | cuts |
 |---|---|---|---|---|---|
-| baseline | 723.9 | — | 0.412 | 0.132 | 0 |
-| per-length ranking | 642.7 | −11.2% | 0.386 | 0.145 | 0 |
-| perceptual weighting | 722.2 | −0.2% | 0.315 | 0.138 | 0 |
-| board matched to image | 686.1 | −5.2% | **0.693** | **0.066** | 0 |
-| chord reuse (×3) | 723.9 | 0.0% | 0.412 | 0.132 | 0 |
-| all levers | 656.9 | −9.3% | 0.594 | 0.066 | 0 |
-| all + prune 0.03 | **612.6** | **−15.4%** | 0.564 | 0.068 | 40 |
+| baseline | 578.5 | — | 0.414 | 0.136 | 4 |
+| per-length ranking | 523.0 | −9.6% | 0.397 | 0.147 | 4 |
+| perceptual weighting | 580.5 | +0.3% | 0.332 | 0.141 | 3 |
+| chord reuse (×3) | 578.8 | 0.0% | 0.414 | 0.136 | 4 |
+| lookahead | 584.6 | +1.0% | **0.425** | **0.134** | 4 |
+| all levers + prune 0.03 | **486.5** | **−15.9%** | 0.280 | 0.163 | 3 |
 
-So: **15% less thread, and it looks better than the baseline on both measures**
-— SSIM 0.56 against 0.41, colour error halved. The catch is 40 cuts, and that
-matching the board means buying or painting a board that colour.
+Thread economy is a genuine trade, not a free lunch: 16% less thread costs real
+fidelity, while `lookahead` buys fidelity back for about 1% more thread. Which
+end of that you want is the point of having the dial.
+
+The four tie-offs on the baseline are honest, not a regression: greedy's walk
+changes colour, and each colour is wound as its own strand.
 
 What each lever actually does, including where it does nothing:
 
-- **Board matched to the image** is the one that matters, and it is barely an
-  algorithm. Thread only has to cover what differs from the board, so a large
-  flat background is free if the board already is that colour. Choosing it has
-  to weigh *coverage*, not just closeness: scoring by distance alone hands a
-  single black thread a black board and leaves it nothing to do.
 - **Per-length ranking** trades fidelity for thread rather than giving it away:
   −11% thread, but SSIM falls too. A real Pareto move, not a free win.
 - **Pruning** drops the chords that stopped paying, ranked by what each one
@@ -166,11 +164,26 @@ and knows nothing about the repair chords the sequencer invents.
 | | | |
 |---|---|---|
 | `greedy` | the unoptimised baseline | one continuous walk, no knob but stopping early |
+| `lookahead` | greedy with a two-chord horizon | `effort` is how many candidates it weighs |
 | `descent` | exactly convex, single colour | `lambda` is the price of thread |
 | `surrogate` | projected gradient, colour | `lambda` is the price of thread |
 
 Switch with `--algorithm` on the CLI, the **Solver** dropdown on the page, or
 `Wind.solve ~algorithm`. `bin/bench.exe` runs them all side by side.
+
+`lookahead` exists because greedy's real weakness is that a chord can be the
+best available and still strand the thread at a pin with nothing good to do
+next. It plays each of the best few candidates, asks what the follow-up would
+then be worth, and takes the pair worth most together. That is only possible
+because the engine's undo is exact -- a crossing inverts, and undoing along the
+chord in reverse visits every pixel in the order it was touched -- so a trial
+leaves the picture exactly as it found it.
+
+A blockwise variant was tried first and dropped: wind a hundred chords, replay
+the block from several different opening moves, keep the best. It measured as
+noise, error 2616 against 2596 for eight times the work, because greedy
+reconverges on its old path within a few chords. The horizon is where the
+improvement is, not the restart.
 
 **The baseline is never more than a click away.** `Solver.default_config` has
 every lever off and `Wind.Greedy` is the default; a test pins both, field by
