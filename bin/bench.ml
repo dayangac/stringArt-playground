@@ -40,7 +40,6 @@ let () =
     if !colours > 0 then Palette.of_image ~k:!colours target frame else Palette.grayscale
   in
   let white = [| 1.; 1.; 1. |] in
-  let auto = Palette.best_board palette target frame in
   let sigma = Metrics.viewing_sigma ~diameter_m:!diameter ~distance_m:!distance ~px:!size in
   let base =
     { Solver.default_config with
@@ -64,14 +63,13 @@ let () =
       cuts }
   in
   let economical =
-    { base with scoring = Solver.Per_length; chord_cost = 60.; perceptual = true; board = auto }
+    { base with scoring = Solver.Per_length; chord_cost = 60.; perceptual = true }
   in
   let rows =
     [
       run "baseline" base;
       run "per-length" { base with scoring = Solver.Per_length; chord_cost = 60. };
       run "perceptual" { base with perceptual = true };
-      run "auto board" { base with board = auto };
       run "reuse x3" { base with max_windings = 3 };
       run "all levers" economical;
       run "all + prune 0.01" ~prune:0.01 economical;
@@ -79,18 +77,19 @@ let () =
     ]
     @ (if !colours > 0 then []
        else
-         [ run "descent l=0" ~algorithm:Wind.Descent ~effort:6 base;
+         [ run "lookahead" ~algorithm:Wind.Lookahead ~effort:6 base;
+           run "descent l=0" ~algorithm:Wind.Descent ~effort:6 base;
            run "descent l=0.1" ~algorithm:Wind.Descent ~lambda:0.1 ~effort:6 base;
            run "descent l=0.25" ~algorithm:Wind.Descent ~lambda:0.25 ~effort:6 base ])
     @ (if !colours = 0 then []
        else
-         [ run "surrogate l=0" ~algorithm:Wind.Surrogate ~effort:20 base;
+         [ run "lookahead" ~algorithm:Wind.Lookahead ~effort:6 base;
+           run "surrogate l=0" ~algorithm:Wind.Surrogate ~effort:20 base;
            run "surrogate l=0.002" ~algorithm:Wind.Surrogate ~lambda:0.002 ~effort:20 base ])
   in
   let baseline = List.hd rows in
-  Printf.printf "palette  %s\nboard    %s (auto)\nviewing  %.1f m, blur sigma %.2f px\n\n"
-    (String.concat " " (Palette.names palette))
-    (Palette.to_hex auto) !distance sigma;
+  Printf.printf "palette  %s\nviewing  %.1f m, blur sigma %.2f px\n\n"
+    (String.concat " " (Palette.names palette)) !distance sigma;
   Printf.printf "%-18s %7s %9s %8s %8s %6s %9s\n" "variant" "chords" "metres" "ssim" "deltaE"
     "cuts" "vs base";
   List.iter
