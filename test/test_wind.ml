@@ -43,7 +43,7 @@ let every_algorithm_round_trips_its_name () =
         (Wind.of_string (String.uppercase_ascii (Wind.name a)) = Some a))
     Wind.all;
   Alcotest.(check bool) "nonsense is rejected" true (Wind.of_string "spiral" = None);
-  Alcotest.(check int) "three algorithms" 3 (List.length Wind.all)
+  Alcotest.(check int) "four algorithms" 4 (List.length Wind.all)
 
 (* ---- every algorithm produces something windable ---- *)
 
