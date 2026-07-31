@@ -16,4 +16,5 @@ let () =
       Test_descent.suite;
       Test_wind.suite;
       Test_lookahead.suite;
+      Test_surrogate.suite;
     ]
