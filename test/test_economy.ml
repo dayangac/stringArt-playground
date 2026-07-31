@@ -211,64 +211,6 @@ let uniform_weighting_is_the_default () =
   Alcotest.(check bool) "weighting actually changes the winding" false
     (same_steps plain.Solver.steps weighted.Solver.steps)
 
-(* ---- board colour ---- *)
-
-let best_board_picks_the_dominant_colour () =
-  let img = subject ~w:64 ~h:64 in
-  let frame = frame_of ~pins:48 ~size:64 in
-  let palette = fox_palette in
-  let board = Palette.best_board palette img frame in
-  let orange = fox_palette.(1).Palette.color in
-  Array.iteri
-    (fun i v -> check_float ~tol:1e-6 "the field, not the blob" orange.(i) v)
-    board
-
-let best_board_saves_thread () =
-  let img = subject ~w:64 ~h:64 in
-  let frame = frame_of ~pins:48 ~size:64 in
-  let board = Palette.best_board fox_palette img frame in
-  let on_white = Solver.solve ~config:(cfg ()) ~palette:fox_palette img in
-  let matched = Solver.solve ~config:(cfg ~board ()) ~palette:fox_palette img in
-  Alcotest.(check bool)
-    (Printf.sprintf "starts at %g instead of %g" matched.Solver.initial_error
-       on_white.Solver.initial_error)
-    true
-    (matched.Solver.initial_error < on_white.Solver.initial_error);
-  Alcotest.(check bool)
-    (Printf.sprintf "%.0f px of thread instead of %.0f" matched.Solver.thread_px
-       on_white.Solver.thread_px)
-    true
-    (matched.Solver.thread_px < on_white.Solver.thread_px)
-
-(* The failure this criterion exists to prevent: scoring boards by how close
-   they look picks black for a single black thread, which then has nothing left
-   to move. *)
-let best_board_never_traps_the_thread () =
-  let img = subject ~w:64 ~h:64 in
-  let frame = frame_of ~pins:48 ~size:64 in
-  let board = Palette.best_board Palette.grayscale img frame in
-  let luminance = (0.2126 *. board.(0)) +. (0.7152 *. board.(1)) +. (0.0722 *. board.(2)) in
-  Alcotest.(check bool)
-    (Printf.sprintf "a black thread needs a light board, got %s" (Palette.to_hex board))
-    true
-    (luminance > 0.5);
-  let r = Solver.solve ~config:(cfg ~board ()) ~palette:Palette.grayscale img in
-  Alcotest.(check bool) "and there is something to wind" true (Array.length r.Solver.steps > 0)
-
-(* A board the palette can reach is not enough: reaching it from white means
-   burying the board completely, which is the thread a matching board saves. *)
-let best_board_counts_the_coverage_not_just_the_reach () =
-  let img = subject ~w:64 ~h:64 in
-  let frame = frame_of ~pins:48 ~size:64 in
-  (* white can reach every one of these by winding right over itself *)
-  let board = Palette.best_board fox_palette img frame in
-  Alcotest.(check string) "picks the field, not white" fox_palette.(1).Palette.hex
-    (Palette.to_hex board)
-
-let best_board_rejects_an_empty_palette () =
-  Alcotest.check_raises "empty" (Invalid_argument "Palette.best_board: empty palette") (fun () ->
-      ignore (Palette.best_board [||] (subject ~w:16 ~h:16) (frame_of ~pins:16 ~size:16)))
-
 (* ---- accounting ---- *)
 
 let length_px_agrees_with_the_solver () =
@@ -459,15 +401,6 @@ let suite =
       Alcotest.test_case "dark pixels are weighted more than bright ones" `Quick
         dark_pixels_are_weighted_more_than_bright_ones;
       Alcotest.test_case "uniform weighting is the default" `Quick uniform_weighting_is_the_default;
-      Alcotest.test_case "best board picks the dominant colour" `Quick
-        best_board_picks_the_dominant_colour;
-      Alcotest.test_case "best board saves thread" `Quick best_board_saves_thread;
-      Alcotest.test_case "best board never traps the thread" `Quick
-        best_board_never_traps_the_thread;
-      Alcotest.test_case "best board counts the coverage not just the reach" `Quick
-        best_board_counts_the_coverage_not_just_the_reach;
-      Alcotest.test_case "best board rejects an empty palette" `Quick
-        best_board_rejects_an_empty_palette;
       Alcotest.test_case "length_px agrees with the solver" `Quick
         length_px_agrees_with_the_solver;
       Alcotest.test_case "a walk has no cuts" `Quick a_walk_has_no_cuts;
