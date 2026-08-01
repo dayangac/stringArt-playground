@@ -136,7 +136,10 @@ let wind () =
            ~stroke_opacity:opacity steps);
       set_download "dl-seq" ~name:"winding.tsv" ~mime:"text/tab-separated-values"
         (Svg.instructions ~palette steps);
-      set_text "status" "Done."
+      set_text "status"
+        (if Array.length steps = 0 then
+           "That produced no chords at all. Try more effort, a darker thread, or fewer colours."
+         else "Done.")
 
 let describe = function
   | Jv.Error e -> Jstr.to_string (Jv.Error.name e) ^ ": " ^ Jstr.to_string (Jv.Error.message e)
