@@ -168,6 +168,19 @@ and knows nothing about the repair chords the sequencer invents.
 | `descent` | exactly convex, single colour | `lambda` is the price of thread |
 | `surrogate` | projected gradient, colour | `lambda` is the price of thread |
 
+`surrogate` starts from the greedy winding and keeps the best result it sees,
+scored by exact replay. Both guards were added after it returned an empty frame
+and called it done: building from nothing, every chord count creeps up together
+and none reaches a whole winding for twenty-odd iterations, so a short run
+produced nothing at all. And optimising the approximation harder is not the
+same as a better picture -- past a point the exact error climbs again, so the
+run hands back its best checkpoint rather than its last. It can no longer come
+out worse than the greedy it began with.
+
+`effort` means different things: candidates weighed by `lookahead`, sweeps for
+`descent`, gradient steps for `surrogate` -- which wants many more, so the
+dispatcher multiplies it.
+
 Switch with `--algorithm` on the CLI, the **Solver** dropdown on the page, or
 `Wind.solve ~algorithm`. `bin/bench.exe` runs them all side by side.
 
