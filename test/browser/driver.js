@@ -44,6 +44,7 @@ async function wind(mode, algorithm) {
     chords: parseInt(document.getElementById("stat-chords").textContent, 10),
     cuts: parseInt(document.getElementById("stat-cuts").textContent, 10),
     thread: document.getElementById("stat-thread").textContent,
+    threadNote: document.getElementById("stat-thread-note").textContent,
     match: parseFloat(document.getElementById("stat-match").textContent),
     dark: darkFraction(document.getElementById("result")),
     svgLines: (decodeURIComponent(svg).match(/<line /g) || []).length,
