@@ -68,8 +68,8 @@
                  font-weight: 400; }
   button.ghost:hover { color: var(--thread); border-color: var(--thread); }
 
-  .stage { display: flex; flex-direction: column; gap: .55rem; min-height: 0; }
-  .canvases { flex: 1; min-height: 0; display: flex; gap: .8rem; align-items: flex-start; }
+  /* source, then the result, then the numbers: left to right */
+  .stage { display: grid; grid-template-columns: 140px 1fr 200px; gap: .9rem; min-height: 0; }
   figure { margin: 0; display: flex; flex-direction: column; gap: .25rem; min-height: 0; }
   figcaption { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
                color: var(--dim); flex: none; }
@@ -78,27 +78,31 @@
   /* the canvas is whatever the solver rendered; let it fill the frame rather
      than sit at its intrinsic pixel size */
   .frame img, .frame canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
-  /* the source is a thumbnail; the wound frame is square and as tall as the room allows */
-  figure.source { flex: none; width: 140px; }
+  /* The source is a thumbnail in a box. The wound picture is the thing itself:
+     no box, so a square canvas in a wider column leaves nothing empty to look
+     at, and nothing to overflow into its neighbours either. */
   figure.source .frame { width: 100%; }
-  figure.wound { flex: 1; min-width: 0; height: 100%; align-items: center; }
-  figure.wound .frame { flex: 1; min-height: 0; align-self: center; }
+  figure.wound { min-width: 0; height: 100%; }
+  figure.wound .frame { flex: 1; min-height: 0; width: 100%; aspect-ratio: auto;
+                        border: 0; background: none; border-radius: 0; }
 
-  .readout { flex: none; display: flex; align-items: center; gap: 1.4rem; flex-wrap: wrap; }
-  .stats { display: flex; gap: 1.2rem; }
-  .stats div { font-variant-numeric: tabular-nums; }
-  .stats span { display: block; font-size: 10px; text-transform: uppercase;
-                letter-spacing: .07em; color: var(--dim); }
-  .stats b { font-size: 1.05rem; font-weight: 600; }
+  .readout { display: flex; flex-direction: column; gap: .55rem; min-height: 0;
+             border-left: 1px solid var(--line); padding-left: .9rem; }
+  .stat { font-variant-numeric: tabular-nums; }
+  .stat span { display: block; font-size: 10px; text-transform: uppercase;
+               letter-spacing: .07em; color: var(--dim); }
+  .stat b { font-size: 1.05rem; font-weight: 600; }
   /* using the least thread is the point of the whole thing, so it leads */
-  .stats .headline { padding-right: 1.2rem; border-right: 1px solid var(--line); }
-  .stats .headline b { font-size: 1.7rem; color: var(--thread); letter-spacing: -.02em; }
-  .stats .headline em { display: block; font-style: normal; font-size: 11px; color: var(--dim); }
+  .stat.headline { padding-bottom: .55rem; border-bottom: 1px solid var(--line); }
+  .stat.headline b { font-size: 1.8rem; color: var(--thread); letter-spacing: -.02em;
+                     display: block; line-height: 1.1; }
+  .stat.headline em { display: block; font-style: normal; font-size: 11px; color: var(--dim); }
+  .rest { display: flex; gap: 1.1rem; }
   .palette { display: flex; gap: .25rem; min-height: 22px; flex-wrap: wrap; }
   .chip { width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(0,0,0,.15); }
-  .downloads { display: flex; gap: .8rem; margin-left: auto; }
+  .downloads { display: flex; flex-direction: column; gap: .3rem; margin-top: auto; }
   .downloads a { font-size: 12px; color: var(--thread); }
-  #status { color: var(--dim); font-size: 12px; margin: 0; flex: none; }
+  #status { color: var(--dim); font-size: 12px; margin: 0; }
   .hidden { display: none; }
 </style>
 </head>
@@ -178,30 +182,29 @@
   </form>
 
   <section class="stage">
-    <div class="canvases">
-      <figure class="source">
-        <figcaption>Source</figcaption>
-        <div class="frame" id="source"></div>
-      </figure>
-      <figure class="wound">
-        <figcaption>Wound</figcaption>
-        <div class="frame"><canvas id="result" width="660" height="660"></canvas></div>
-      </figure>
-    </div>
-    <div class="readout">
-      <div class="stats">
-        <div class="headline"><span>Thread used</span><b id="stat-thread">—</b>
-          <em id="stat-thread-note"></em></div>
-        <div><span>Chords</span><b id="stat-chords">—</b></div>
-        <div><span>Tie-offs</span><b id="stat-cuts">—</b></div>
-        <div><span>SSIM</span><b id="stat-match">—</b></div>
+    <figure class="source">
+      <figcaption>Source</figcaption>
+      <div class="frame" id="source"></div>
+    </figure>
+    <figure class="wound">
+      <figcaption>Wound</figcaption>
+      <div class="frame"><canvas id="result" width="660" height="660"></canvas></div>
+    </figure>
+    <aside class="readout">
+      <div class="stat headline">
+        <span>Thread used</span><b id="stat-thread">—</b><em id="stat-thread-note"></em>
       </div>
+      <div class="rest">
+        <div class="stat"><span>Chords</span><b id="stat-chords">—</b></div>
+        <div class="stat"><span>Tie-offs</span><b id="stat-cuts">—</b></div>
+      </div>
+      <div class="stat"><span>Likeness</span><b id="stat-match">—</b></div>
+      <p id="status">Pick an image to begin.</p>
       <div class="downloads">
-        <a id="dl-svg" class="hidden">SVG</a>
-        <a id="dl-seq" class="hidden">Instructions</a>
+        <a id="dl-svg" class="hidden">Download SVG</a>
+        <a id="dl-seq" class="hidden">Winding instructions</a>
       </div>
-    </div>
-    <p id="status">Pick an image to begin.</p>
+    </aside>
   </section>
 </main>
 <canvas id="work" style="display:none"></canvas>
