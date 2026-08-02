@@ -59,6 +59,9 @@ async function wind(mode, algorithm) {
 (async () => {
   const report = { ok: false, error: null, runs: [] };
   try {
+    // the board has to be on screen before anything is wound
+    const blank = document.getElementById("result").getBoundingClientRect();
+    report.boardBeforeWinding = { w: Math.round(blank.width), h: Math.round(blank.height) };
     const dt = new DataTransfer();
     dt.items.add(await makeSourceFile());
     const input = document.getElementById("file");
