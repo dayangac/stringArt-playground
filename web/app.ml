@@ -2,8 +2,6 @@ open Brr
 open Brr_canvas
 open Stringart
 
-let preview_scale = 3
-
 (* A chord costs its length in thread plus a fixed amount of handling; without
    the second term a length penalty drifts to swarms of tiny rim chords. *)
 let economy_chord_cost = 60.
@@ -117,10 +115,12 @@ let wind () =
       let res = wound.Wind.result in
       let steps = wound.Wind.sequence.Sequence.steps in
       let thread_px = Wind.thread_px wound and cuts = wound.Wind.sequence.Sequence.cuts in
-      let out = size * preview_scale in
+      (* the canvas is drawn at whatever size was asked for; thread has a fixed
+         real thickness, so it widens with the scale rather than thinning out *)
+      let out = int_value "canvas" in
+      let scale = float_of_int out /. float_of_int size in
       draw_image (Canvas.of_el (el "result"))
-        (Render.image ~pins ~palette ~opacity ~board ~width:(float_of_int preview_scale) ~w:out
-           ~h:out steps);
+        (Render.image ~pins ~palette ~opacity ~board ~width:scale ~w:out ~h:out steps);
       show_palette palette;
       let shown = Render.image ~pins ~palette ~opacity ~board ~w:size ~h:size steps in
       let m = Metrics.compare ~frame target shown in
@@ -134,8 +134,7 @@ let wind () =
         (Printf.sprintf "%.2f m per chord" (metres /. Float.max 1. (float_of_int (Array.length steps))));
       set_text "stat-match" (Printf.sprintf "%.3f" m.Metrics.ssim);
       set_download "dl-svg" ~name:"string-art.svg" ~mime:"image/svg+xml"
-        (Svg.of_steps ~pins ~size:out ~palette ~stroke_width:(float_of_int preview_scale)
-           ~stroke_opacity:opacity steps);
+        (Svg.of_steps ~pins ~size:out ~palette ~stroke_width:scale ~stroke_opacity:opacity steps);
       set_download "dl-seq" ~name:"winding.tsv" ~mime:"text/tab-separated-values"
         (Svg.instructions ~palette steps);
       set_text "status"
@@ -197,4 +196,4 @@ let () =
       ignore (Ev.listen Ev.input (fun _ -> sync ()) (El.as_target (el input))))
     [ ("pins", "out-pins"); ("lines", "out-lines"); ("opacity", "out-opacity"); ("size", "out-size");
       ("gap", "out-gap"); ("colours", "out-colours"); ("economy", "out-economy");
-      ("lambda", "out-lambda"); ("effort", "out-effort") ]
+      ("lambda", "out-lambda"); ("effort", "out-effort"); ("canvas", "out-canvas") ]
