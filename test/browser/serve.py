@@ -37,6 +37,9 @@ def check(report):
     problems = []
     if not report.get("ok"):
         problems.append("driver failed: %s" % report.get("error"))
+    board = report.get("boardBeforeWinding") or {}
+    if board.get("w", 0) < 100 or board.get("h", 0) < 100:
+        problems.append("the board is not on screen before winding: %s" % board)
     lay = report.get("layout") or {}
     if not lay:
         problems.append("no layout report")
