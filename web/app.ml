@@ -130,6 +130,8 @@ let wind () =
       set_text "stat-chords" (string_of_int (Array.length steps));
       set_text "stat-cuts" (string_of_int cuts);
       set_text "stat-thread" (Printf.sprintf "%.0f m" metres);
+      set_text "stat-thread-note"
+        (Printf.sprintf "%.2f m per chord" (metres /. Float.max 1. (float_of_int (Array.length steps))));
       set_text "stat-match" (Printf.sprintf "%.3f" m.Metrics.ssim);
       set_download "dl-svg" ~name:"string-art.svg" ~mime:"image/svg+xml"
         (Svg.of_steps ~pins ~size:out ~palette ~stroke_width:(float_of_int preview_scale)
