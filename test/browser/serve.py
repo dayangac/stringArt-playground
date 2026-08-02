@@ -77,6 +77,10 @@ def check(report):
             problems.append("%s: winding instructions look empty" % mode)
         if not r["thread"].endswith(" m"):
             problems.append("%s: thread length %r" % (mode, r["thread"]))
+        # the thing the project is trying to minimise has to be on screen
+        if not r.get("threadNote", "").endswith("per chord"):
+            problems.append("%s: thread headline has no per-chord figure (%r)"
+                            % (mode, r.get("threadNote")))
     return problems
 
 
