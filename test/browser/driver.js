@@ -32,6 +32,7 @@ async function wind(mode, algorithm) {
   const t0 = Date.now();
   document.getElementById("mode").value = mode;
   if (algorithm) document.getElementById("algorithm").value = algorithm;
+  if (algorithm !== "greedy") document.getElementById("effort").value = "2";
   document.getElementById("run").click();
   for (let i = 0; i < 200 && document.getElementById("status").textContent !== "Done."; i++) {
     await sleep(100);
@@ -50,6 +51,8 @@ async function wind(mode, algorithm) {
     svgLines: (decodeURIComponent(svg).match(/<line /g) || []).length,
     seq: (document.getElementById("dl-seq").getAttribute("href") || "").length,
     png: document.getElementById("result").toDataURL("image/png"),
+    canvasAsked: parseInt(document.getElementById("canvas").value, 10),
+    canvasGot: document.getElementById("result").width,
   };
 }
 
