@@ -90,6 +90,10 @@
   .stats span { display: block; font-size: 10px; text-transform: uppercase;
                 letter-spacing: .07em; color: var(--dim); }
   .stats b { font-size: 1.05rem; font-weight: 600; }
+  /* using the least thread is the point of the whole thing, so it leads */
+  .stats .headline { padding-right: 1.2rem; border-right: 1px solid var(--line); }
+  .stats .headline b { font-size: 1.7rem; color: var(--thread); letter-spacing: -.02em; }
+  .stats .headline em { display: block; font-style: normal; font-size: 11px; color: var(--dim); }
   .palette { display: flex; gap: .25rem; min-height: 22px; flex-wrap: wrap; }
   .chip { width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(0,0,0,.15); }
   .downloads { display: flex; gap: .8rem; margin-left: auto; }
@@ -181,9 +185,10 @@
     </div>
     <div class="readout">
       <div class="stats">
+        <div class="headline"><span>Thread used</span><b id="stat-thread">—</b>
+          <em id="stat-thread-note"></em></div>
         <div><span>Chords</span><b id="stat-chords">—</b></div>
         <div><span>Tie-offs</span><b id="stat-cuts">—</b></div>
-        <div><span>Thread</span><b id="stat-thread">—</b></div>
         <div><span>SSIM</span><b id="stat-match">—</b></div>
       </div>
       <div class="downloads">
