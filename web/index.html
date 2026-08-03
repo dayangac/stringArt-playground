@@ -78,13 +78,13 @@
   /* the canvas is whatever the solver rendered; let it fill the frame rather
      than sit at its intrinsic pixel size */
   .frame img, .frame canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
-  /* The source is a thumbnail in a box. The wound picture is the thing itself:
-     no box, so a square canvas in a wider column leaves nothing empty to look
-     at, and nothing to overflow into its neighbours either. */
+  /* The board is always on screen, wound or not, so the page does not jump
+     when a result arrives and you can see what you are about to fill. Sizing
+     it from the column width rather than its own height keeps it from
+     overflowing across the source thumbnail. */
   figure.source .frame { width: 100%; }
   figure.wound { min-width: 0; height: 100%; }
-  figure.wound .frame { flex: 1; min-height: 0; width: 100%; aspect-ratio: auto;
-                        border: 0; background: none; border-radius: 0; }
+  figure.wound .frame { flex: 1; min-height: 0; width: 100%; aspect-ratio: auto; }
 
   .readout { display: flex; flex-direction: column; gap: .55rem; min-height: 0;
              border-left: 1px solid var(--line); padding-left: .9rem; }
@@ -98,6 +98,7 @@
                      display: block; line-height: 1.1; }
   .stat.headline em { display: block; font-style: normal; font-size: 11px; color: var(--dim); }
   .rest { display: flex; gap: 1.1rem; }
+  .readout input[type=number] { margin-top: .1rem; }
   .palette { display: flex; gap: .25rem; min-height: 22px; flex-wrap: wrap; }
   .chip { width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(0,0,0,.15); }
   .downloads { display: flex; flex-direction: column; gap: .3rem; margin-top: auto; }
@@ -166,11 +167,6 @@
       <div><label for="effort">Effort <b id="out-effort"></b></label>
         <input type="range" id="effort" min="1" max="12" step="1" value="6"></div>
     </div>
-    <div class="pair">
-      <div><label for="diameter">Frame across (m)</label>
-        <input type="number" id="diameter" min="0.1" max="3" step="0.05" value="0.6"></div>
-      <div></div>
-    </div>
     <div>
       <label>Thread to buy</label>
       <div id="palette" class="palette"></div>
@@ -193,6 +189,10 @@
     <aside class="readout">
       <div class="stat headline">
         <span>Thread used</span><b id="stat-thread">—</b><em id="stat-thread-note"></em>
+      </div>
+      <div class="stat">
+        <label for="diameter">Frame across (m)</label>
+        <input type="number" id="diameter" min="0.1" max="3" step="0.05" value="0.6">
       </div>
       <div class="rest">
         <div class="stat"><span>Chords</span><b id="stat-chords">—</b></div>
