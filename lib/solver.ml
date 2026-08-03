@@ -40,7 +40,9 @@ type config = {
                        quantity the ranking uses, so it simply ends the run;
                        under [Absolute] it is a filter, and a long chord can win
                        on total gain yet be turned away for costing too much *)
-  perceptual : bool; (* weight the error by where the eye actually looks *)
+  perceptual : bool; (* weight the error towards where the eye looks. Measured
+                        worse than plain linear RGB on every setting tried, so
+                        it is off; see [perceptual_weights] for the numbers *)
 }
 
 let default_config =
@@ -92,26 +94,65 @@ let target img (frame : Geometry.t) ~board =
   done;
   t
 
-(* Per-pixel error weight. OKLab lightness goes as the cube root of luminance,
-   so the same error in linear light is far more visible in the shadows than in
-   the highlights. Weighting by the square of that derivative spends thread
-   where the eye will notice it, and it is a plain scalar, so the scoring loop
-   keeps the shape it had. Normalised to a mean of one so that thresholds keep
-   their meaning from one picture to the next. *)
+(* Per-pixel error weight, and the whole reason the loss is not plain linear
+   RGB. What the result is judged by is distance in OKLab, where lightness goes
+   as the cube root of luminance, so an error in linear light matters far more
+   in the shadows than in the highlights. Weighting each pixel by the square of
+   that derivative makes the thing being optimised agree with the thing being
+   measured, and it is a plain scalar, so the scoring loop keeps its shape.
+
+   That is the theory. It does not survive measurement, and this is off by
+   default because of it. On a photographic target, against plain linear RGB at
+   SSIM 0.389 and delta-E 0.137:
+
+     cap 1.2   ssim 0.248   dE 0.162   saturation 0.297 -> 0.092
+     cap 2.0   ssim 0.230   dE 0.175   saturation 0.058
+     cap 8.0   ssim 0.232   dE 0.177   saturation 0.041
+
+   Worse on both measures at every setting, and it drains the colour out of the
+   picture. The reason is that the weighting is a linearisation valid near the
+   target, and a bare white board is nowhere near it: weighting dark channels
+   heavily makes dark thread look like the answer to everything, since every
+   thread darkens, so the search piles on black and the saturation goes with it.
+
+   Kept, per channel and capped, because it is the right shape for the idea and
+   the bench should be able to show what it costs. Not used. *)
 let shadow_floor = 0.01
+let weight_ceiling = 8.
 
 let perceptual_weights t3 ~npix =
-  let g = Array.make npix 1. in
+  let n = npix * Image.channels in
+  let g = Array.make n 1. in
   let total = ref 0. in
-  for p = 0 to npix - 1 do
-    let o = p * Image.channels in
-    let y = (0.2126 *. t3.(o)) +. (0.7152 *. t3.(o + 1)) +. (0.0722 *. t3.(o + 2)) in
-    let v = (y +. shadow_floor) ** (-4. /. 3.) in
-    g.(p) <- v;
+  for i = 0 to n - 1 do
+    let v = (t3.(i) +. shadow_floor) ** (-4. /. 3.) in
+    g.(i) <- v;
     total := !total +. v
   done;
-  let mean = !total /. float_of_int npix in
-  if mean > 0. then Array.map (fun v -> v /. mean) g else g
+  let mean = !total /. float_of_int n in
+  if mean <= 0. then g
+  else begin
+    let cap = weight_ceiling *. mean in
+    let total = ref 0. in
+    for i = 0 to n - 1 do
+      let v = Float.min cap g.(i) in
+      g.(i) <- v;
+      total := !total +. v
+    done;
+    let mean = !total /. float_of_int n in
+    if mean > 0. then Array.map (fun v -> v /. mean) g else g
+  end
+
+(* Some solvers work a single thread colour along one segment and need one
+   number per pixel rather than three. *)
+let pixel_weights g ~npix =
+  Array.init npix (fun p ->
+      let o = p * Image.channels in
+      let s = ref 0. in
+      for ch = 0 to Image.channels - 1 do
+        s := !s +. g.(o + ch)
+      done;
+      !s /. float_of_int Image.channels)
 
 (* The winding, as a mutable state you can push chords onto and pop them off
    again. Greedy only ever pushes, but an algorithm that wants to reconsider a
@@ -150,7 +191,10 @@ let engine ?(config = default_config) ?(palette = Palette.grayscale) img =
   let frame = Geometry.make ~pins:config.pins ~w ~h in
   let npix = w * h in
   let t3 = target img frame ~board:config.board in
-  let g = if config.perceptual then perceptual_weights t3 ~npix else Array.make npix 1. in
+  let g =
+    if config.perceptual then perceptual_weights t3 ~npix
+    else Array.make (npix * Image.channels) 1.
+  in
   let c3 = Array.make (npix * Image.channels) 0. in
   let we3 = Array.make (npix * Image.channels) 0. in
   let wc3 = Array.make (npix * Image.channels) 0. in
@@ -158,20 +202,20 @@ let engine ?(config = default_config) ?(palette = Palette.grayscale) img =
   let err = ref 0. in
   for p = 0 to npix - 1 do
     let o = p * Image.channels in
-    let gp = g.(p) in
     let a = ref 0. and b = ref 0. in
     for ch = 0 to Image.channels - 1 do
+      let gp = g.(o + ch) in
       let c = config.board.(ch) in
       let e = c -. t3.(o + ch) in
       c3.(o + ch) <- c;
       we3.(o + ch) <- gp *. e;
       wc3.(o + ch) <- gp *. c;
-      a := !a +. (e *. c);
-      b := !b +. (c *. c);
+      a := !a +. (gp *. e *. c);
+      b := !b +. (gp *. c *. c);
       err := !err +. (gp *. e *. e)
     done;
-    wec.(p) <- gp *. !a;
-    wcc.(p) <- gp *. !b
+    wec.(p) <- !a;
+    wcc.(p) <- !b
   done;
   { cfg = config;
     colour = Array.map (fun (t : Palette.thread) -> t.Palette.color) palette;
@@ -215,7 +259,8 @@ let score_chord e ~from ~to_ f =
   if gap >= max 1 e.cfg.min_gap then begin
     let se0 = ref 0. and se1 = ref 0. and se2 = ref 0. in
     let sc0 = ref 0. and sc1 = ref 0. and sc2 = ref 0. in
-    let sec = ref 0. and scc = ref 0. and sg = ref 0. in
+    let sec = ref 0. and scc = ref 0. in
+    let sg0 = ref 0. and sg1 = ref 0. and sg2 = ref 0. in
     Raster.iter_nearest ~stride:score_stride ~w:e.w ~h:e.h e.px.(from) e.py.(from) e.px.(to_)
       e.py.(to_) (fun p ->
         let o = p * Image.channels in
@@ -227,7 +272,9 @@ let score_chord e ~from ~to_ f =
         sc2 := !sc2 +. e.wc3.(o + 2);
         sec := !sec +. e.wec.(p);
         scc := !scc +. e.wcc.(p);
-        sg := !sg +. e.g.(p));
+        sg0 := !sg0 +. e.g.(o);
+        sg1 := !sg1 +. e.g.(o + 1);
+        sg2 := !sg2 +. e.g.(o + 2));
     let alpha = e.cfg.opacity in
     let a2 = alpha *. alpha in
     let base = (2. *. alpha *. !sec) -. (a2 *. !scc) in
@@ -237,9 +284,10 @@ let score_chord e ~from ~to_ f =
         let c = e.colour.(k) in
         let se_c = (!se0 *. c.(0)) +. (!se1 *. c.(1)) +. (!se2 *. c.(2)) in
         let sc_c = (!sc0 *. c.(0)) +. (!sc1 *. c.(1)) +. (!sc2 *. c.(2)) in
-        let gain =
-          base -. (2. *. alpha *. se_c) +. (2. *. a2 *. sc_c) -. (a2 *. !sg *. e.cnorm2.(k))
+        let weighted_c2 =
+          (!sg0 *. c.(0) *. c.(0)) +. (!sg1 *. c.(1) *. c.(1)) +. (!sg2 *. c.(2) *. c.(2))
         in
+        let gain = base -. (2. *. alpha *. se_c) +. (2. *. a2 *. sc_c) -. (a2 *. weighted_c2) in
         let score = match e.cfg.scoring with Absolute -> gain | Per_length -> gain /. cost in
         (* worth winding at all, and still worth the thread it costs *)
         if gain > 0. && gain /. cost > e.cfg.min_gain then f k score
@@ -280,9 +328,9 @@ let apply e ~from ~to_ ~thread =
   Raster.iter ~w:e.w ~h:e.h e.px.(from) e.py.(from) e.px.(to_) e.py.(to_) (fun p wgt ->
       let o = p * Image.channels in
       let beta = alpha *. wgt in
-      let gp = e.g.(p) in
       let a = ref 0. and b = ref 0. in
       for ch = 0 to Image.channels - 1 do
+        let gp = e.g.(o + ch) in
         let old = e.c3.(o + ch) in
         let nv = old +. (beta *. (c.(ch) -. old)) in
         let e_old = old -. e.t3.(o + ch) and e_new = nv -. e.t3.(o + ch) in
@@ -290,11 +338,11 @@ let apply e ~from ~to_ ~thread =
         e.we3.(o + ch) <- gp *. e_new;
         e.wc3.(o + ch) <- gp *. nv;
         e.err <- e.err +. (gp *. ((e_new *. e_new) -. (e_old *. e_old)));
-        a := !a +. (e_new *. nv);
-        b := !b +. (nv *. nv)
+        a := !a +. (gp *. e_new *. nv);
+        b := !b +. (gp *. nv *. nv)
       done;
-      e.wec.(p) <- gp *. !a;
-      e.wcc.(p) <- gp *. !b);
+      e.wec.(p) <- !a;
+      e.wcc.(p) <- !b);
   let idx = key e from to_ thread in
   Bytes.set e.wound idx (Char.chr (Char.code (Bytes.get e.wound idx) + 1));
   before -. e.err
@@ -307,9 +355,9 @@ let undo e ~from ~to_ ~thread =
   Raster.iter ~w:e.w ~h:e.h e.px.(to_) e.py.(to_) e.px.(from) e.py.(from) (fun p wgt ->
       let o = p * Image.channels in
       let beta = alpha *. wgt in
-      let gp = e.g.(p) in
       let a = ref 0. and b = ref 0. in
       for ch = 0 to Image.channels - 1 do
+        let gp = e.g.(o + ch) in
         let nv = e.c3.(o + ch) in
         let old = if beta >= 1. then nv else (nv -. (beta *. c.(ch))) /. (1. -. beta) in
         let e_old = old -. e.t3.(o + ch) and e_new = nv -. e.t3.(o + ch) in
@@ -317,11 +365,11 @@ let undo e ~from ~to_ ~thread =
         e.we3.(o + ch) <- gp *. e_old;
         e.wc3.(o + ch) <- gp *. old;
         e.err <- e.err +. (gp *. ((e_old *. e_old) -. (e_new *. e_new)));
-        a := !a +. (e_old *. old);
-        b := !b +. (old *. old)
+        a := !a +. (gp *. e_old *. old);
+        b := !b +. (gp *. old *. old)
       done;
-      e.wec.(p) <- gp *. !a;
-      e.wcc.(p) <- gp *. !b);
+      e.wec.(p) <- !a;
+      e.wcc.(p) <- !b);
   let idx = key e from to_ thread in
   let n = Char.code (Bytes.get e.wound idx) in
   if n > 0 then Bytes.set e.wound idx (Char.chr (n - 1))
