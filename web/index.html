@@ -73,8 +73,13 @@
   figure { margin: 0; display: flex; flex-direction: column; gap: .25rem; min-height: 0; }
   figcaption { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
                color: var(--dim); flex: none; }
+  /* stretch, not center: a centred grid item is sized by its content, so the
+     canvas's height:100% resolves against an auto height, it falls back to its
+     own square ratio at full width, and overflow clips the top and bottom off
+     the picture. Stretching makes the box exactly the frame, and object-fit
+     letterboxes the square inside it. */
   .frame { border: 1px solid var(--line); border-radius: 9px; background: #fff;
-           display: grid; place-items: center; overflow: hidden; aspect-ratio: 1; }
+           display: grid; place-items: stretch; overflow: hidden; aspect-ratio: 1; }
   /* the canvas is whatever the solver rendered; let it fill the frame rather
      than sit at its intrinsic pixel size */
   .frame img, .frame canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
