@@ -77,6 +77,19 @@ let show_palette (palette : Palette.t) =
   in
   El.set_children (el "palette") (Array.to_list (Array.map chip palette))
 
+(* Metres depend on how big the real frame is, so changing that has to update
+   the number without making anyone wind the whole thing again. *)
+let wound_px = ref 0.
+let wound_chords = ref 0
+
+let show_thread () =
+  let metres = !wound_px *. float_value "diameter" /. 2. in
+  if !wound_chords > 0 then begin
+    set_text "stat-thread" (Printf.sprintf "%.0f m" metres);
+    set_text "stat-thread-note"
+      (Printf.sprintf "%.2f m per chord" (metres /. float_of_int !wound_chords))
+  end
+
 let source = ref None
 
 let wind () =
@@ -124,14 +137,11 @@ let wind () =
       show_palette palette;
       let shown = Render.image ~pins ~palette ~opacity ~board ~w:size ~h:size steps in
       let m = Metrics.compare ~frame target shown in
-      let metres =
-        thread_px *. float_value "diameter" /. (2. *. res.Solver.frame.Geometry.r)
-      in
+      wound_px := thread_px /. res.Solver.frame.Geometry.r;
+      wound_chords := Array.length steps;
       set_text "stat-chords" (string_of_int (Array.length steps));
       set_text "stat-cuts" (string_of_int cuts);
-      set_text "stat-thread" (Printf.sprintf "%.0f m" metres);
-      set_text "stat-thread-note"
-        (Printf.sprintf "%.2f m per chord" (metres /. Float.max 1. (float_of_int (Array.length steps))));
+      show_thread ();
       set_text "stat-match" (Printf.sprintf "%.3f" m.Metrics.ssim);
       set_download "dl-svg" ~name:"string-art.svg" ~mime:"image/svg+xml"
         (Svg.of_steps ~pins ~size:out ~palette ~stroke_width:scale ~stroke_opacity:opacity steps);
@@ -177,6 +187,7 @@ let () =
      Firefox restores form state -- with no change event ever having fired. The
      page then looks loaded and is not, so pick it up on the way in. *)
   (match El.Input.files (el "file") with f :: _ -> load_file f | [] -> ());
+  ignore (Ev.listen Ev.input (fun _ -> show_thread ()) (El.as_target (el "diameter")));
   (* One click back to the unoptimised solver, so the baseline every saving is
      measured against is never more than a click away. *)
   ignore
