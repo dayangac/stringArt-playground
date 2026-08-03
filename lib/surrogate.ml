@@ -52,7 +52,8 @@ let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lam
   let npix = w * h in
   let t3 = Solver.target img frame ~board:config.Solver.board in
   let g =
-    if config.Solver.perceptual then Solver.perceptual_weights t3 ~npix else Array.make npix 1.
+    if config.Solver.perceptual then Solver.perceptual_weights t3 ~npix
+    else Array.make (npix * Image.channels) 1.
   in
   let board = config.Solver.board in
   let alpha = config.Solver.opacity in
@@ -117,7 +118,7 @@ let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lam
         let v = (u *. board.(ch)) +. ((1. -. u) *. mix) in
         work.c.(o + ch) <- v;
         let d = v -. t3.(o + ch) in
-        err := !err +. (g.(p) *. d *. d)
+        err := !err +. (g.(o + ch) *. d *. d)
       done
     done;
     !err
@@ -146,7 +147,7 @@ let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lam
       let u = exp (-.alpha *. n) in
       let acc = ref 0. in
       for ch = 0 to Image.channels - 1 do
-        let e = 2. *. g.(p) *. (work.c.(o + ch) -. t3.(o + ch)) in
+        let e = 2. *. g.(o + ch) *. (work.c.(o + ch) -. t3.(o + ch)) in
         let mix = work.m.(o + ch) /. n in
         acc := !acc +. (e *. ((alpha *. u *. (mix -. board.(ch))) -. ((1. -. u) *. mix /. n)));
         v.(o + ch) <- e *. (1. -. u) /. n
@@ -210,7 +211,7 @@ let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lam
       let o = p * Image.channels in
       for ch = 0 to Image.channels - 1 do
         let d = r.Image.data.{o + ch} -. t3.(o + ch) in
-        acc := !acc +. (g.(p) *. d *. d)
+        acc := !acc +. (g.(o + ch) *. d *. d)
       done
     done;
     !acc
@@ -272,7 +273,8 @@ let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lam
       (fun (st : Solver.step) ->
         let a = st.Solver.a and b = st.Solver.b in
         let acc = ref 0. in
-        Raster.iter ~w ~h px.(a) py.(a) px.(b) py.(b) (fun p wgt -> acc := !acc +. (wgt *. g.(p)));
+        Raster.iter ~w ~h px.(a) py.(a) px.(b) py.(b) (fun p wgt ->
+            acc := !acc +. (wgt *. g.(p * Image.channels)));
         Float.max 1e-12 !acc)
       steps
   in
