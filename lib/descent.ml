@@ -61,8 +61,12 @@ let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lam
   let frame = Geometry.make ~pins ~w ~h in
   let npix = w * h in
   let t3 = Solver.target img frame ~board:config.Solver.board in
+  (* one weight per pixel: this solves along a single board-to-thread segment,
+     so there is no per-channel choice left to make *)
   let g =
-    if config.Solver.perceptual then Solver.perceptual_weights t3 ~npix else Array.make npix 1.
+    if config.Solver.perceptual then
+      Solver.pixel_weights (Solver.perceptual_weights t3 ~npix) ~npix
+    else Array.make npix 1.
   in
   let colour = palette.(0).Palette.color in
   let want = demand ~target:t3 ~board:config.Solver.board ~colour ~npix in
