@@ -58,6 +58,13 @@ async function wind(mode, algorithm) {
     png: document.getElementById("result").toDataURL("image/png"),
     canvasAsked: parseInt(document.getElementById("canvas").value, 10),
     canvasGot: document.getElementById("result").width,
+    // the whole picture has to be on screen, not clipped by its frame
+    fit: (() => {
+      const c = document.getElementById("result").getBoundingClientRect();
+      const f = document.getElementById("result").parentElement.getBoundingClientRect();
+      return { over: Math.round(Math.max(c.width - f.width, c.height - f.height)),
+               w: Math.round(c.width), h: Math.round(c.height) };
+    })(),
   };
 }
 
