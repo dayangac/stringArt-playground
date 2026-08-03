@@ -35,13 +35,21 @@
     min-height: 0;                 /* let the canvas shrink instead of pushing */
     display: grid;
     grid-template-columns: 320px 1fr;
+    /* An auto grid row grows to fit its content, so without this the row takes
+       its height from the canvas's own square bitmap and the bottom of the
+       picture ends up below the window. minmax(0,1fr) pins the row to the
+       height that is actually available and lets everything inside shrink. */
+    grid-template-rows: minmax(0, 1fr);
     gap: 1rem;
   }
 
   .panel {
     border: 1px solid var(--line); background: #fff; border-radius: 9px;
     padding: .75rem; display: flex; flex-direction: column; gap: .5rem;
-    min-height: 0;
+    /* On a short window the controls are what runs out of room first. Let the
+       panel scroll inside itself rather than pushing the page taller: the
+       picture stays whole and the page still never scrolls. */
+    min-height: 0; overflow-y: auto;
   }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
   label { display: flex; justify-content: space-between; align-items: baseline;
@@ -69,17 +77,20 @@
   button.ghost:hover { color: var(--thread); border-color: var(--thread); }
 
   /* source, then the result, then the numbers: left to right */
-  .stage { display: grid; grid-template-columns: 140px 1fr 200px; gap: .9rem; min-height: 0; }
+  .stage { display: grid; grid-template-columns: 140px 1fr 200px;
+           grid-template-rows: minmax(0, 1fr); gap: .9rem; min-height: 0; }
   figure { margin: 0; display: flex; flex-direction: column; gap: .25rem; min-height: 0; }
   figcaption { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
                color: var(--dim); flex: none; }
-  /* stretch, not center: a centred grid item is sized by its content, so the
-     canvas's height:100% resolves against an auto height, it falls back to its
-     own square ratio at full width, and overflow clips the top and bottom off
-     the picture. Stretching makes the box exactly the frame, and object-fit
-     letterboxes the square inside it. */
+  /* The single grid cell has to be pinned to the frame's own size. Left as
+     auto it takes its height from the canvas, while the canvas is asking for
+     100% of it -- a cycle the browser breaks by falling back to the canvas's
+     square bitmap ratio, which is then taller than the frame and gets its
+     bottom clipped. Pinning the cell makes the canvas exactly the frame, and
+     object-fit letterboxes the square picture inside it. */
   .frame { border: 1px solid var(--line); border-radius: 9px; background: #fff;
-           display: grid; place-items: stretch; overflow: hidden; aspect-ratio: 1; }
+           display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+           place-items: stretch; overflow: hidden; aspect-ratio: 1; }
   /* the canvas is whatever the solver rendered; let it fill the frame rather
      than sit at its intrinsic pixel size */
   .frame img, .frame canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
