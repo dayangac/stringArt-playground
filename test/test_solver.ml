@@ -129,11 +129,17 @@ let reported_error_matches_the_render () =
       ~opacity:config.Solver.opacity ~board:white_board ~w:64 ~h:64 r.Solver.steps
   in
   let target = Solver.target img r.Solver.frame ~board:white_board in
+  (* the solver weights its error perceptually, so the recomputation has to use
+     the same weights or it is measuring a different quantity *)
+  let g =
+    if config.Solver.perceptual then Solver.perceptual_weights target ~npix:(64 * 64)
+    else Array.make (64 * 64 * Image.channels) 1.
+  in
   let e = ref 0. in
   Array.iteri
     (fun i t ->
       let v = t -. out.Image.data.{i} in
-      e := !e +. (v *. v))
+      e := !e +. (g.(i) *. v *. v))
     target;
   Alcotest.(check bool)
     (Printf.sprintf "reported %g vs recomputed %g" r.Solver.final_error !e)
