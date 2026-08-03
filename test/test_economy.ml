@@ -187,6 +187,7 @@ let weights_average_to_one () =
   let frame = frame_of ~pins:48 ~size:64 in
   let t3 = Solver.target img frame ~board:white in
   let g = Solver.perceptual_weights t3 ~npix:(64 * 64) in
+  Alcotest.(check int) "one weight per channel" (64 * 64 * Image.channels) (Array.length g);
   let mean = Array.fold_left ( +. ) 0. g /. float_of_int (Array.length g) in
   check_float ~tol:1e-9 "normalised" 1. mean;
   Array.iter (fun v -> Alcotest.(check bool) "positive" true (v > 0.)) g
@@ -197,8 +198,9 @@ let dark_pixels_are_weighted_more_than_bright_ones () =
   Image.set img ~x:4 ~y:4 ~ch:1 0.02;
   Image.set img ~x:4 ~y:4 ~ch:2 0.02;
   let frame = frame_of ~pins:16 ~size:8 in
+  (* weights are per channel now, so index the pixel's first channel *)
   let g = Solver.perceptual_weights (Solver.target img frame ~board:white) ~npix:64 in
-  let dark = g.((4 * 8) + 4) and bright = g.(0) in
+  let dark = g.((((4 * 8) + 4) * Image.channels)) and bright = g.(0) in
   Alcotest.(check bool)
     (Printf.sprintf "dark %g against bright %g" dark bright)
     true
