@@ -37,6 +37,11 @@ async function wind(mode, algorithm) {
   for (let i = 0; i < 200 && document.getElementById("status").textContent !== "Done."; i++) {
     await sleep(100);
   }
+  // the exports are built when the link is clicked, not on every wind, so the
+  // test has to click them to see anything
+  document.getElementById("dl-svg").click();
+  document.getElementById("dl-seq").click();
+  await sleep(50);
   const svg = document.getElementById("dl-svg").getAttribute("href") || "";
   return {
     mode: mode + (algorithm ? "/" + algorithm : ""),
