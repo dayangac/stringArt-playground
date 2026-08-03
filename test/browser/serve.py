@@ -75,6 +75,10 @@ def check(report):
         if r.get("canvasGot") != r.get("canvasAsked"):
             problems.append("%s: asked for a %s px canvas, got %s"
                             % (mode, r.get("canvasAsked"), r.get("canvasGot")))
+        fit = r.get("fit") or {}
+        if fit.get("over", 999) > 1:
+            problems.append("%s: the picture overflows its frame by %spx (%sx%s)"
+                            % (mode, fit.get("over"), fit.get("w"), fit.get("h")))
         if r["dark"] < 0.05:
             problems.append("%s: canvas looks blank (%.3f dark)" % (mode, r["dark"]))
         if r["svgLines"] != r["chords"]:
