@@ -22,6 +22,11 @@
    so the target is projected onto that segment first; whatever lies off it is
    a constant no winding can touch.
 
+   With more than one thread colour none of that holds -- the compositing stops
+   being order-independent and the log trick goes with it -- so a colour palette
+   is handled by descending on the surrogate instead, one (chord, colour) pair
+   at a time. Same idea, weaker guarantee.
+
    The result is a chord *set*, not a walk. Run it through [Sequence] to get
    something windable. *)
 
@@ -52,8 +57,12 @@ let demand ~(target : float array) ~board ~(colour : float array) ~npix =
 
 let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lambda = 0.)
     ?(sweeps = 8) ?(shadow_bias = 0.) img =
-  if Array.length palette <> 1 then
-    invalid_arg "Descent.solve: needs exactly one thread colour";
+  if Array.length palette = 0 then invalid_arg "Descent.solve: empty palette";
+  (* more than one colour: the exact convex form does not exist, so hand it to
+     the surrogate, which descends on the same objective by another route *)
+  if Array.length palette > 1 then
+    Surrogate.solve ~config ~palette ~lambda ~iters:(max 4 sweeps) img
+  else begin
   if sweeps < 0 then invalid_arg "Descent.solve: negative sweeps";
   if lambda < 0. then invalid_arg "Descent.solve: negative lambda";
   let w = img.Image.w and h = img.Image.h in
@@ -163,3 +172,4 @@ let solve ?(config = Solver.default_config) ?(palette = Palette.grayscale) ?(lam
     initial_error = err blank;
     final_error = err out;
     thread_px = Solver.length_px frame steps }
+  end
