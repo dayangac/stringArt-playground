@@ -36,7 +36,8 @@ let specs =
     ("--windings", Arg.Set_int windings, " how many times one chord may be wound");
     ("--min-gain", Arg.Set_float min_gain, " stop once a chord returns less than this per pixel");
     ("--prune", Arg.Set_float prune, " drop chords until SSIM falls this far (e.g. 0.01)");
-    ("--algorithm", Arg.Set_string algorithm, " greedy (default) | descent | surrogate");
+    ("--algorithm", Arg.Set_string algorithm,
+     " greedy (default) | lookahead | orthogonal | descent | surrogate | soft | anneal | dither | palette | layers");
     ("--lambda", Arg.Set_float lambda, " price of thread, for descent and surrogate");
     ("--effort", Arg.Set_int effort, " sweeps or iterations for the non-greedy solvers");
     ("--max-cuts", Arg.Set_int max_cuts, " strands you will accept rather than pay to join");
@@ -88,6 +89,7 @@ let () =
       ~prune:!prune ~sigma ~config ~palette target
   in
   let elapsed = Sys.time () -. t0 in
+  let palette = wound.Wind.palette in
   let res = wound.Wind.result in
   let steps = wound.Wind.sequence.Sequence.steps in
   let thread_px = Wind.thread_px wound and cuts = wound.Wind.sequence.Sequence.cuts in
