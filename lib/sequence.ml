@@ -222,8 +222,15 @@ let eulerise_thread ~(frame : Geometry.t) ~thread ~max_cuts (chords : (int * int
 let eulerise ?(max_cuts = 0) ~(frame : Geometry.t) (steps : Solver.step array) =
   if Array.length steps = 0 then { steps = [||]; added = [||]; added_px = 0.; cuts = 0 }
   else begin
+    (* First appearance, not sorted: the order the colours were handed over is
+       a decision some solvers make on purpose, and sorting would throw it
+       away. Opaque thread does not commute, so it changes the picture. *)
     let threads =
-      List.sort_uniq compare (Array.to_list (Array.map (fun s -> s.Solver.thread) steps))
+      List.fold_left
+        (fun acc (s : Solver.step) ->
+          if List.mem s.Solver.thread acc then acc else acc @ [ s.Solver.thread ])
+        []
+        (Array.to_list steps)
     in
     let out = ref [] and extra = ref [] and strands = ref 0 in
     List.iter
