@@ -48,6 +48,7 @@ let () =
   let metres px = px *. !diameter /. (2. *. frame.Geometry.r) in
   let run name ?(prune = 0.) ?(algorithm = Wind.Greedy) ?(lambda = 0.) ?(effort = 8) config =
     let wound = Wind.solve ~algorithm ~lambda ~effort ~prune ~sigma ~config ~palette target in
+    let palette = wound.Wind.palette in
     let steps = wound.Wind.sequence.Sequence.steps in
     let thread_px = Wind.thread_px wound and cuts = wound.Wind.sequence.Sequence.cuts in
     let out =
@@ -75,26 +76,20 @@ let () =
       run "all + prune 0.01" ~prune:0.01 economical;
       run "all + prune 0.03" ~prune:0.03 economical;
     ]
-    @ (if !colours > 0 then []
-       else
-         [ run "lookahead" ~algorithm:Wind.Lookahead ~effort:6 base;
-           run "descent l=0" ~algorithm:Wind.Descent ~effort:6 base;
-           run "descent l=0.1" ~algorithm:Wind.Descent ~lambda:0.1 ~effort:6 base;
-           run "descent l=0.25" ~algorithm:Wind.Descent ~lambda:0.25 ~effort:6 base ])
-    @ (if !colours = 0 then []
-       else
-         [ run "lookahead" ~algorithm:Wind.Lookahead ~effort:6 base;
-           run "surrogate l=0" ~algorithm:Wind.Surrogate ~effort:20 base;
-           run "surrogate l=0.002" ~algorithm:Wind.Surrogate ~lambda:0.002 ~effort:20 base ])
+    @ List.filter_map
+        (fun a ->
+          if a = Wind.Greedy then None
+          else Some (run (Wind.name a) ~algorithm:a ~effort:6 base))
+        Wind.all
   in
   let baseline = List.hd rows in
   Printf.printf "palette  %s\nviewing  %.1f m, blur sigma %.2f px\n\n"
     (String.concat " " (Palette.names palette)) !distance sigma;
-  Printf.printf "%-18s %7s %9s %8s %8s %6s %9s\n" "variant" "chords" "metres" "ssim" "deltaE"
+  Printf.printf "%-20s %7s %9s %8s %8s %6s %9s\n" "variant" "chords" "metres" "ssim" "deltaE"
     "cuts" "vs base";
   List.iter
     (fun r ->
-      Printf.printf "%-18s %7d %9.1f %8.4f %8.4f %6d %8.1f%%\n" r.name r.chords r.metres r.ssim
+      Printf.printf "%-20s %7d %9.1f %8.4f %8.4f %6d %8.1f%%\n" r.name r.chords r.metres r.ssim
         r.delta_e r.cuts
         (100. *. (r.metres -. baseline.metres) /. baseline.metres))
     rows
