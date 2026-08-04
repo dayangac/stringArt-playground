@@ -12,22 +12,35 @@
 type algorithm =
   | Greedy (* the unoptimised baseline *)
   | Lookahead (* greedy with a two-chord horizon *)
-  | Descent (* convex coordinate descent, single colour only *)
+  | Orthogonal (* greedy that re-chooses the colours it already laid *)
+  | Descent (* convex for one colour, surrogate descent for a palette *)
   | Surrogate (* projected gradient on the colour surrogate *)
+  | Soft (* colours relaxed off the discrete choice, then hardened *)
+  | Anneal (* greedy allowed to change its mind *)
+  | Dither (* quantise per pixel in OKLab, then wind each colour *)
+  | Palette (* choose the thread colours and the winding together *)
+  | Layers (* which colour goes down first *)
 
-let all = [ Greedy; Lookahead; Descent; Surrogate ]
+let all = [ Greedy; Lookahead; Orthogonal; Descent; Surrogate; Soft; Anneal; Dither; Palette; Layers ]
 
 let name = function
   | Greedy -> "greedy"
   | Lookahead -> "lookahead"
+  | Orthogonal -> "orthogonal"
   | Descent -> "descent"
   | Surrogate -> "surrogate"
+  | Soft -> "soft"
+  | Anneal -> "anneal"
+  | Dither -> "dither"
+  | Palette -> "palette"
+  | Layers -> "layers"
 
 let of_string s =
   List.find_opt (fun a -> name a = String.lowercase_ascii s) all
 
 type t = {
   algorithm : algorithm;
+  palette : Palette.t; (* what it was wound in; [Palette] chooses its own *)
   result : Solver.result; (* as the solver produced it *)
   pruned : int; (* chords dropped as no longer worth their thread *)
   kept_px : float; (* thread in what survived pruning *)
@@ -41,14 +54,20 @@ let thread_meters t ~diameter_m =
 
 let solve ?(algorithm = Greedy) ?(lambda = 0.) ?(effort = 8) ?(max_cuts = 0) ?(prune = 0.)
     ?(sigma = 0.) ?(config = Solver.default_config) ?(palette = Palette.grayscale) img =
-  let result =
+  (* effort means different things: candidates weighed, sweeps taken, gradient
+     steps run. Each solver reads it in its own units. *)
+  let result, palette =
     match algorithm with
-    | Greedy -> Solver.solve ~config ~palette img
-    | Lookahead -> Lookahead.solve ~config ~palette ~width:effort img
-    | Descent -> Descent.solve ~config ~palette ~lambda ~sweeps:effort img
-    (* effort means candidates to lookahead and sweeps to descent, but the
-       surrogate counts gradient steps and wants far more of them *)
-    | Surrogate -> Surrogate.solve ~config ~palette ~lambda ~iters:(effort * 5) img
+    | Greedy -> (Solver.solve ~config ~palette img, palette)
+    | Lookahead -> (Lookahead.solve ~config ~palette ~width:effort img, palette)
+    | Orthogonal -> (Orthogonal.solve ~config ~palette ~refit:(effort * 20) img, palette)
+    | Descent -> (Descent.solve ~config ~palette ~lambda ~sweeps:effort img, palette)
+    | Surrogate -> (Surrogate.solve ~config ~palette ~lambda ~iters:(effort * 5) img, palette)
+    | Soft -> (Soft.solve ~config ~palette ~steps_count:(effort * 8) img, palette)
+    | Anneal -> (Anneal.solve ~config ~palette ~attempts:(effort * 10) img, palette)
+    | Dither -> (Dither.solve ~config ~palette img, palette)
+    | Layers -> (Layers.solve ~config ~palette img, palette)
+    | Palette -> Palette_opt.solve ~config ~palette ~rounds:(max 2 (effort / 2)) img
   in
   let kept, pruned, kept_px =
     if prune <= 0. then (result.Solver.steps, 0, result.Solver.thread_px)
@@ -61,4 +80,4 @@ let solve ?(algorithm = Greedy) ?(lambda = 0.) ?(effort = 8) ?(max_cuts = 0) ?(p
       (p.Prune.steps, p.Prune.dropped, p.Prune.thread_px)
   in
   let sequence = Sequence.eulerise ~max_cuts ~frame:result.Solver.frame kept in
-  { algorithm; result; pruned; kept_px; sequence }
+  { algorithm; palette; result; pruned; kept_px; sequence }
