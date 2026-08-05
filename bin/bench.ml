@@ -46,8 +46,9 @@ let () =
       pins = !pins; max_lines = !lines; opacity = !opacity; board = white }
   in
   let metres px = px *. !diameter /. (2. *. frame.Geometry.r) in
-  let run name ?(prune = 0.) ?(algorithm = Wind.Greedy) ?(lambda = 0.) ?(effort = 8) config =
-    let wound = Wind.solve ~algorithm ~lambda ~effort ~prune ~sigma ~config ~palette target in
+  let run name ?(prune = 0.) ?(algorithm = Wind.Greedy) ?(params = []) config =
+    let params = if params = [] then Algo.defaults algorithm else params in
+    let wound = Wind.solve ~algorithm ~params ~prune ~sigma ~config ~palette target in
     let palette = wound.Wind.palette in
     let steps = wound.Wind.sequence.Sequence.steps in
     let thread_px = Wind.thread_px wound and cuts = wound.Wind.sequence.Sequence.cuts in
@@ -79,7 +80,7 @@ let () =
     @ List.filter_map
         (fun a ->
           if a = Wind.Greedy then None
-          else Some (run (Wind.name a) ~algorithm:a ~effort:6 base))
+          else Some (run (Wind.name a) ~algorithm:a base))
         Wind.all
   in
   let baseline = List.hd rows in
