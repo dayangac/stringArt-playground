@@ -43,7 +43,7 @@ let every_algorithm_round_trips_its_name () =
         (Wind.of_string (String.uppercase_ascii (Wind.name a)) = Some a))
     Wind.all;
   Alcotest.(check bool) "nonsense is rejected" true (Wind.of_string "spiral" = None);
-  Alcotest.(check int) "four algorithms" 4 (List.length Wind.all)
+  Alcotest.(check int) "ten algorithms" 10 (List.length Wind.all)
 
 (* ---- every algorithm produces something windable ---- *)
 
@@ -98,13 +98,23 @@ let thread_meters_scales_with_the_frame () =
     (approx ~tol:1e-9 (2. *. Wind.thread_meters r ~diameter_m:0.5)
        (Wind.thread_meters r ~diameter_m:1.0))
 
-let descent_refuses_a_colour_palette () =
-  let img = subject ~size:48 in
-  Alcotest.check_raises "one colour only"
-    (Invalid_argument "Descent.solve: needs exactly one thread colour") (fun () ->
-      ignore
-        (Wind.solve ~algorithm:Wind.Descent ~config:(config_for Wind.Descent) ~palette:fox_palette
-           img))
+(* Every solver has to cope with a colour palette; that is the whole point of
+   the set. *)
+let every_algorithm_handles_colour () =
+  let img = subject ~size:56 in
+  List.iter
+    (fun a ->
+      let config = config_for a in
+      let r = Wind.solve ~algorithm:a ~effort:2 ~config ~palette:fox_palette img in
+      Alcotest.(check bool)
+        (Printf.sprintf "%s wound something in colour" (Wind.name a))
+        true
+        (Array.length r.Wind.sequence.Sequence.steps > 0);
+      Alcotest.(check bool)
+        (Printf.sprintf "%s reports the palette it used" (Wind.name a))
+        true
+        (Array.length r.Wind.palette > 0))
+    Wind.all
 
 let the_surrogate_handles_colour () =
   let img = subject ~size:56 in
@@ -150,7 +160,7 @@ let suite =
         repairs_are_counted_in_the_thread_total;
       Alcotest.test_case "thread meters scales with the frame" `Quick
         thread_meters_scales_with_the_frame;
-      Alcotest.test_case "descent refuses a colour palette" `Quick descent_refuses_a_colour_palette;
+      Alcotest.test_case "every algorithm handles colour" `Quick every_algorithm_handles_colour;
       Alcotest.test_case "the surrogate handles colour" `Quick the_surrogate_handles_colour;
       Alcotest.test_case "a cut budget is passed through" `Quick a_cut_budget_is_passed_through;
     ] )
