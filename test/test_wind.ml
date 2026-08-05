@@ -56,7 +56,7 @@ let every_algorithm_returns_a_windable_result () =
   List.iter
     (fun a ->
       let config = config_for a in
-      let r = Wind.solve ~algorithm:a ~effort:3 ~config ~palette:Palette.grayscale img in
+      let r = Wind.solve ~algorithm:a ~params:(Algo.defaults a) ~config ~palette:Palette.grayscale img in
       let seq = r.Wind.sequence in
       Alcotest.(check bool)
         (Printf.sprintf "%s wound something" (Wind.name a))
@@ -83,8 +83,10 @@ let greedy_needs_no_repair () =
 
 let repairs_are_counted_in_the_thread_total () =
   let img = Image.desaturate (subject ~size:56) in
-  let r = Wind.solve ~algorithm:Wind.Descent ~effort:3 ~config:(config_for Wind.Descent)
-      ~palette:Palette.grayscale img in
+  let r =
+    Wind.solve ~algorithm:Wind.Descent ~config:(config_for Wind.Descent)
+      ~palette:Palette.grayscale img
+  in
   Alcotest.(check bool) "total includes the repairs" true
     (Wind.thread_px r >= r.Wind.result.Solver.thread_px -. 1e-9);
   check_float ~tol:1e-6 "exactly"
@@ -105,7 +107,7 @@ let every_algorithm_handles_colour () =
   List.iter
     (fun a ->
       let config = config_for a in
-      let r = Wind.solve ~algorithm:a ~effort:2 ~config ~palette:fox_palette img in
+      let r = Wind.solve ~algorithm:a ~params:(Algo.defaults a) ~config ~palette:fox_palette img in
       Alcotest.(check bool)
         (Printf.sprintf "%s wound something in colour" (Wind.name a))
         true
@@ -119,8 +121,8 @@ let every_algorithm_handles_colour () =
 let the_surrogate_handles_colour () =
   let img = subject ~size:56 in
   let r =
-    Wind.solve ~algorithm:Wind.Surrogate ~effort:20 ~config:(config_for Wind.Surrogate)
-      ~palette:fox_palette img
+    Wind.solve ~algorithm:Wind.Surrogate ~params:[ ("iters", 40.) ]
+      ~config:(config_for Wind.Surrogate) ~palette:fox_palette img
   in
   Alcotest.(check bool) "wound something" true (Array.length r.Wind.sequence.Sequence.steps > 0);
   let used =
@@ -133,11 +135,11 @@ let the_surrogate_handles_colour () =
 let a_cut_budget_is_passed_through () =
   let img = Image.desaturate (subject ~size:56) in
   let tight =
-    Wind.solve ~algorithm:Wind.Descent ~effort:3 ~max_cuts:0 ~config:(config_for Wind.Descent)
+    Wind.solve ~algorithm:Wind.Descent ~max_cuts:0 ~config:(config_for Wind.Descent)
       ~palette:Palette.grayscale img
   in
   let loose =
-    Wind.solve ~algorithm:Wind.Descent ~effort:3 ~max_cuts:5 ~config:(config_for Wind.Descent)
+    Wind.solve ~algorithm:Wind.Descent ~max_cuts:5 ~config:(config_for Wind.Descent)
       ~palette:Palette.grayscale img
   in
   Alcotest.(check bool) "allowing cuts never costs more thread" true
