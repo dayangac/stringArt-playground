@@ -16,8 +16,8 @@ let subject ~size = Image.desaturate (orange_with_dark_blob ~w:size ~h:size)
 
 let rejects_bad_arguments () =
   let img = subject ~size:48 in
-  Alcotest.check_raises "two colours" (Invalid_argument "Descent.solve: needs exactly one thread colour")
-    (fun () -> ignore (Descent.solve ~config:(cfg ()) ~palette:fox_palette img));
+  Alcotest.check_raises "empty palette" (Invalid_argument "Descent.solve: empty palette")
+    (fun () -> ignore (Descent.solve ~config:(cfg ()) ~palette:[||] img));
   Alcotest.check_raises "sweeps" (Invalid_argument "Descent.solve: negative sweeps") (fun () ->
       ignore (Descent.solve ~config:(cfg ()) ~sweeps:(-1) img));
   Alcotest.check_raises "lambda" (Invalid_argument "Descent.solve: negative lambda") (fun () ->
@@ -133,9 +133,25 @@ let it_beats_a_bare_board () =
     true
     (d out < d blank)
 
+(* One colour is exactly convex; more than one is handed to the surrogate,
+   which descends on the same objective by another route. *)
+let it_handles_a_colour_palette () =
+  let img = orange_with_dark_blob ~w:64 ~h:64 in
+  let r = Descent.solve ~config:(cfg ()) ~palette:fox_palette ~sweeps:4 img in
+  Alcotest.(check bool) "wound something" true (Array.length r.Solver.steps > 0);
+  let used =
+    List.sort_uniq compare
+      (List.map (fun (s : Solver.step) -> s.Solver.thread) (Array.to_list r.Solver.steps))
+  in
+  Alcotest.(check bool)
+    (Printf.sprintf "%d colours used" (List.length used))
+    true
+    (List.length used > 1)
+
 let suite =
   ( "descent",
     [
+      Alcotest.test_case "it handles a colour palette" `Quick it_handles_a_colour_palette;
       Alcotest.test_case "rejects bad arguments" `Quick rejects_bad_arguments;
       Alcotest.test_case "nothing to do on a matching board" `Quick nothing_to_do_on_a_matching_board;
       Alcotest.test_case "it winds something on a real picture" `Quick
