@@ -77,7 +77,7 @@
   button.ghost:hover { color: var(--thread); border-color: var(--thread); }
 
   /* source, then the result, then the numbers: left to right */
-  .stage { display: grid; grid-template-columns: 140px 1fr 200px;
+  .stage { display: grid; grid-template-columns: 130px 1fr 300px;
            grid-template-rows: minmax(0, 1fr); gap: .9rem; min-height: 0; }
   figure { margin: 0; display: flex; flex-direction: column; gap: .25rem; min-height: 0; }
   figcaption { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
@@ -120,6 +120,11 @@
   .downloads { display: flex; flex-direction: column; gap: .3rem; margin-top: auto; }
   .downloads a { font-size: 12px; color: var(--thread); }
   #status { color: var(--dim); font-size: 12px; margin: 0; }
+  .explain { min-height: 0; overflow-y: auto; border-top: 1px solid var(--line);
+             padding-top: .5rem; }
+  #algo-summary { margin: 0 0 .4rem; font-size: 12px; color: var(--ink); }
+  #algo-maths { margin: 0; font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+                color: var(--dim); white-space: pre-wrap; }
   .hidden { display: none; }
 </style>
 </head>
@@ -180,15 +185,11 @@
     <div class="pair">
       <div><label for="economy">Economy <b id="out-economy"></b></label>
         <input type="range" id="economy" min="0" max="0.05" step="0.005" value="0"></div>
-      <div><label for="lambda">Thread price <b id="out-lambda"></b></label>
-        <input type="range" id="lambda" min="0" max="0.5" step="0.01" value="0"></div>
-    </div>
-    <div class="pair">
       <div><label for="canvas">Canvas px <b id="out-canvas"></b></label>
         <input type="range" id="canvas" min="300" max="1600" step="100" value="700"></div>
-      <div><label for="effort">Effort <b id="out-effort"></b></label>
-        <input type="range" id="effort" min="1" max="12" step="1" value="6"></div>
     </div>
+    <!-- whatever the chosen solver actually takes, built from Algo -->
+    <div id="algo-params"></div>
     <div>
       <label>Thread to buy</label>
       <div id="palette" class="palette"></div>
@@ -222,6 +223,10 @@
       </div>
       <div class="stat"><span>Likeness</span><b id="stat-match">—</b></div>
       <p id="status">Pick an image to begin.</p>
+      <div class="explain">
+        <p id="algo-summary"></p>
+        <pre id="algo-maths"></pre>
+      </div>
       <div class="downloads">
         <a id="dl-svg" class="hidden">Download SVG</a>
         <a id="dl-seq" class="hidden">Winding instructions</a>
