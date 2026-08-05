@@ -32,7 +32,6 @@ async function wind(mode, algorithm) {
   const t0 = Date.now();
   document.getElementById("mode").value = mode;
   if (algorithm) document.getElementById("algorithm").value = algorithm;
-  if (algorithm !== "greedy") document.getElementById("effort").value = "2";
   document.getElementById("run").click();
   for (let i = 0; i < 200 && document.getElementById("status").textContent !== "Done."; i++) {
     await sleep(100);
@@ -92,7 +91,6 @@ async function wind(mode, algorithm) {
     report.baseline = {
       algorithm: document.getElementById("algorithm").value,
       economy: document.getElementById("economy").value,
-      lambda: document.getElementById("lambda").value,
     };
     // no board control should be left on the page
     report.noBoardControl =
