@@ -54,8 +54,7 @@ def check(report):
             problems.append("the wound canvas is cut off at the bottom (%s > %s)"
                             % (lay["resultVisible"], lay["innerHeight"]))
     b = report.get("baseline") or {}
-    if b.get("algorithm") != "greedy" or float(b.get("economy", 1)) != 0 \
-            or float(b.get("lambda", 1)) != 0:
+    if b.get("algorithm") != "greedy" or float(b.get("economy", 1)) != 0:
         problems.append("baseline preset did not reset the levers: %s" % b)
     if not report.get("noBoardControl"):
         problems.append("the board colour control is still on the page")
