@@ -115,6 +115,48 @@ let show_thread () =
       (Printf.sprintf "%.2f m per chord" (metres /. float_of_int !wound_chords))
   end
 
+(* The chosen solver's own knobs, rebuilt whenever the solver changes, so what
+   is on screen is exactly what that solver reads. Described once in Algo. *)
+let algo_inputs : (string * El.t) list ref = ref []
+
+let current_algorithm () =
+  match Wind.of_string (str_value "algorithm") with Some a -> a | None -> Wind.Greedy
+
+let show_algorithm () =
+  let spec = Algo.spec (current_algorithm ()) in
+  set_text "algo-summary" spec.Algo.summary;
+  set_text "algo-maths" (String.concat "\n" spec.Algo.maths);
+  let made =
+    List.map
+      (fun (q : Algo.param) ->
+        let out = El.b [] in
+        let input =
+          El.input
+            ~at:
+              [ At.type' (Jstr.v "range");
+                At.v (Jstr.v "min") (Jstr.v (Printf.sprintf "%g" q.Algo.min));
+                At.v (Jstr.v "max") (Jstr.v (Printf.sprintf "%g" q.Algo.max));
+                At.v (Jstr.v "step") (Jstr.v (Printf.sprintf "%g" q.Algo.step));
+                At.v (Jstr.v "value") (Jstr.v (Printf.sprintf "%g" q.Algo.default));
+                At.title (Jstr.v q.Algo.note) ]
+            ()
+        in
+        let show () =
+          El.set_children out [ El.txt' (Jstr.to_string (El.prop El.Prop.value input)) ]
+        in
+        show ();
+        ignore (Ev.listen Ev.input (fun _ -> show ()) (El.as_target input));
+        (q.Algo.key, input, El.div [ El.label [ El.txt' (q.Algo.label ^ " "); out ]; input ]))
+      spec.Algo.params
+  in
+  algo_inputs := List.map (fun (k, i, _) -> (k, i)) made;
+  El.set_children (el "algo-params") (List.map (fun (_, _, d) -> d) made)
+
+let algo_params () =
+  List.map
+    (fun (k, i) -> (k, float_of_string (Jstr.to_string (El.prop El.Prop.value i))))
+    !algo_inputs
+
 let source = ref None
 
 let busy = ref false
@@ -197,9 +239,7 @@ let wind () =
           scoring = (if economy > 0. then Solver.Per_length else Solver.Absolute);
           chord_cost = economy_chord_cost }
       in
-      let algorithm =
-        match Wind.of_string (str_value "algorithm") with Some a -> a | None -> Wind.Greedy
-      in
+      let algorithm = current_algorithm () in
       let done_ res =
         finish ~pins ~palette ~opacity ~board ~size ~frame ~target ~economy ~algorithm res
       in
@@ -256,8 +296,7 @@ let wind () =
           ignore
             (G.set_timeout ~ms:32 (fun () ->
                  let wound =
-                   Wind.solve ~algorithm ~lambda:(float_value "lambda")
-                     ~effort:(int_value "effort") ~config ~palette target
+                   Wind.solve ~algorithm ~params:(algo_params ()) ~config ~palette target
                  in
                  done_ wound.Wind.result))
 
@@ -293,6 +332,9 @@ let () =
        (fun _ -> match El.Input.files (el "file") with f :: _ -> load_file f | [] -> ())
        (El.as_target (el "file")));
   ignore (Ev.listen Ev.click (fun _ -> wind_later ()) (El.as_target (el "run")));
+  show_algorithm ();
+  ignore
+    (Ev.listen Ev.change (fun _ -> show_algorithm ()) (El.as_target (el "algorithm")));
   (* A reload can leave a file sitting in the input from the previous visit --
      Firefox restores form state -- with no change event ever having fired. The
      page then looks loaded and is not, so pick it up on the way in. *)
@@ -306,9 +348,8 @@ let () =
        (fun _ ->
          set_value "algorithm" "greedy";
          set_value "economy" "0";
-         set_value "lambda" "0";
-         List.iter (fun (i, o) -> set_text o (str_value i))
-           [ ("economy", "out-economy"); ("lambda", "out-lambda") ];
+         show_algorithm ();
+         set_text "out-economy" (str_value "economy");
          set_text "status" "Back to the plain greedy baseline.")
        (El.as_target (el "baseline")));
   List.iter
@@ -318,4 +359,4 @@ let () =
       ignore (Ev.listen Ev.input (fun _ -> sync ()) (El.as_target (el input))))
     [ ("pins", "out-pins"); ("lines", "out-lines"); ("opacity", "out-opacity"); ("size", "out-size");
       ("gap", "out-gap"); ("colours", "out-colours"); ("economy", "out-economy");
-      ("lambda", "out-lambda"); ("effort", "out-effort"); ("canvas", "out-canvas") ]
+      ("canvas", "out-canvas") ]
