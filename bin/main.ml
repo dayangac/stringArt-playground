@@ -19,8 +19,8 @@ let windings = ref 1
 let min_gain = ref 0.
 let prune = ref 0.
 let algorithm = ref "greedy"
-let lambda = ref 0.
-let effort = ref 8
+let params = ref []
+let explain = ref false
 let max_cuts = ref 0
 
 let usage = "stringart <input.ppm> [options]"
@@ -38,8 +38,17 @@ let specs =
     ("--prune", Arg.Set_float prune, " drop chords until SSIM falls this far (e.g. 0.01)");
     ("--algorithm", Arg.Set_string algorithm,
      " greedy (default) | lookahead | orthogonal | descent | surrogate | soft | anneal | dither | palette | layers");
-    ("--lambda", Arg.Set_float lambda, " price of thread, for descent and surrogate");
-    ("--effort", Arg.Set_int effort, " sweeps or iterations for the non-greedy solvers");
+    ( "--set",
+      Arg.String
+        (fun kv ->
+          match String.index_opt kv '=' with
+          | Some i ->
+              params :=
+                (String.sub kv 0 i, float_of_string (String.sub kv (i + 1) (String.length kv - i - 1)))
+                :: !params
+          | None -> prerr_endline ("expected name=value, got " ^ kv)),
+      " set one of the chosen algorithm's parameters, e.g. --set width=8" );
+    ("--explain", Arg.Set explain, " print what the algorithm does, and its parameters");
     ("--max-cuts", Arg.Set_int max_cuts, " strands you will accept rather than pay to join");
     ("--pins", Arg.Set_int pins, " number of pins on the frame");
     ("--lines", Arg.Set_int lines, " maximum number of chords");
@@ -83,10 +92,26 @@ let () =
         exit 1
   in
   let sigma = Metrics.viewing_sigma ~diameter_m:!diameter ~distance_m:!distance ~px:!size in
+  let spec = Algo.spec chosen in
+  if !explain then begin
+    Printf.printf "%s -- %s\n\n" (Wind.name chosen) spec.Algo.summary;
+    List.iter (fun l -> print_endline ("  " ^ l)) spec.Algo.maths;
+    if spec.Algo.params <> [] then begin
+      print_newline ();
+      List.iter
+        (fun (q : Algo.param) ->
+          Printf.printf "  --set %s=%g   %s (%g..%g)\n    %s\n" q.Algo.key q.Algo.default
+            q.Algo.label q.Algo.min q.Algo.max q.Algo.note)
+        spec.Algo.params
+    end;
+    print_newline ()
+  end;
+  (* what was asked for wins; anything not asked for takes its default *)
+  let params = List.rev !params @ Algo.defaults chosen in
   let t0 = Sys.time () in
   let wound =
-    Wind.solve ~algorithm:chosen ~lambda:!lambda ~effort:!effort ~max_cuts:!max_cuts
-      ~prune:!prune ~sigma ~config ~palette target
+    Wind.solve ~algorithm:chosen ~params ~max_cuts:!max_cuts ~prune:!prune ~sigma ~config
+      ~palette target
   in
   let elapsed = Sys.time () -. t0 in
   let palette = wound.Wind.palette in
