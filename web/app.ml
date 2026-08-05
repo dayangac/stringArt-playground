@@ -150,7 +150,16 @@ let show_algorithm () =
       spec.Algo.params
   in
   algo_inputs := List.map (fun (k, i, _) -> (k, i)) made;
-  El.set_children (el "algo-params") (List.map (fun (_, _, d) -> d) made)
+  (* Always say whose settings these are, and say so even when there are none:
+     greedy is the default and takes no parameters, so without this the panel
+     just has a gap in it and nothing suggests other solvers bring knobs. *)
+  let heading =
+    El.label
+      [ El.txt'
+          (Wind.name (current_algorithm ())
+          ^ (if made = [] then " — no settings" else " settings")) ]
+  in
+  El.set_children (el "algo-params") (heading :: List.map (fun (_, _, d) -> d) made)
 
 let algo_params () =
   List.map
