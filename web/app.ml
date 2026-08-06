@@ -167,6 +167,27 @@ let algo_params () =
     (fun (k, i) -> (k, float_of_string (Jstr.to_string (El.prop El.Prop.value i))))
     !algo_inputs
 
+(* Hand the finished winding to the three.js view. OCaml has no 3D binding
+   worth using, so that part is TypeScript and this is the seam: a plain object
+   on the window, three parallel arrays rather than an array of records, since
+   that is what the buffer on the other side wants anyway. *)
+let publish ~pins ~(palette : Palette.t) ~board (steps : Solver.step array) =
+  let ints f = Jv.of_array Jv.of_int (Array.map f steps) in
+  let winding =
+    Jv.obj
+      [| ("pins", Jv.of_int pins);
+         ("board", Jv.of_string (Palette.to_hex board));
+         ("palette",
+          Jv.of_array Jv.of_string (Array.map (fun (t : Palette.thread) -> t.Palette.hex) palette));
+         ("a", ints (fun s -> s.Solver.a));
+         ("b", ints (fun s -> s.Solver.b));
+         ("thread", ints (fun s -> s.Solver.thread)) |]
+  in
+  Jv.set Jv.global "__stringart" winding;
+  match Jv.find Jv.global "__stringartView" with
+  | Some view -> ignore (Jv.call view "rebuild" [||])
+  | None -> ()
+
 let source = ref None
 
 let busy = ref false
@@ -209,6 +230,7 @@ let finish ~pins ~palette ~opacity ~board ~size ~frame ~target ~economy ~algorit
   set_text "stat-cuts" (string_of_int seq.Sequence.cuts);
   show_thread ();
   set_text "stat-match" (Printf.sprintf "%.3f" m.Metrics.ssim);
+  publish ~pins ~palette ~board steps;
   offer_download "dl-svg" ~name:"string-art.svg" ~mime:"image/svg+xml" (fun () ->
       Svg.of_steps ~pins ~size:out ~palette ~stroke_width:scale ~stroke_opacity:opacity steps);
   offer_download "dl-seq" ~name:"winding.tsv" ~mime:"text/tab-separated-values" (fun () ->
@@ -343,6 +365,21 @@ let () =
        (El.as_target (el "file")));
   ignore (Ev.listen Ev.click (fun _ -> wind_later ()) (El.as_target (el "run")));
   show_algorithm ();
+  (* two views of the same winding; the 3D one rebuilds itself when shown, so
+     switching to it after a wind does not need the wind repeating *)
+  let show_pane which =
+    List.iter
+      (fun (pane, tab) ->
+        El.set_class (Jstr.v "hidden") (pane <> which) (el ("pane-" ^ pane));
+        El.set_class (Jstr.v "on") (pane = which) (el tab))
+      [ ("flat", "tab-flat"); ("three", "tab-three") ];
+    if which = "three" then
+      match Jv.find Jv.global "__stringartView" with
+      | Some view -> ignore (Jv.call view "rebuild" [||])
+      | None -> ()
+  in
+  ignore (Ev.listen Ev.click (fun _ -> show_pane "flat") (El.as_target (el "tab-flat")));
+  ignore (Ev.listen Ev.click (fun _ -> show_pane "three") (El.as_target (el "tab-three")));
   ignore
     (Ev.listen Ev.change (fun _ -> show_algorithm ()) (El.as_target (el "algorithm")));
   (* A reload can leave a file sitting in the input from the previous visit --
@@ -359,6 +396,21 @@ let () =
          set_value "algorithm" "greedy";
          set_value "economy" "0";
          show_algorithm ();
+  (* two views of the same winding; the 3D one rebuilds itself when shown, so
+     switching to it after a wind does not need the wind repeating *)
+  let show_pane which =
+    List.iter
+      (fun (pane, tab) ->
+        El.set_class (Jstr.v "hidden") (pane <> which) (el ("pane-" ^ pane));
+        El.set_class (Jstr.v "on") (pane = which) (el tab))
+      [ ("flat", "tab-flat"); ("three", "tab-three") ];
+    if which = "three" then
+      match Jv.find Jv.global "__stringartView" with
+      | Some view -> ignore (Jv.call view "rebuild" [||])
+      | None -> ()
+  in
+  ignore (Ev.listen Ev.click (fun _ -> show_pane "flat") (El.as_target (el "tab-flat")));
+  ignore (Ev.listen Ev.click (fun _ -> show_pane "three") (El.as_target (el "tab-three")));
          set_text "out-economy" (str_value "economy");
          set_text "status" "Back to the plain greedy baseline.")
        (El.as_target (el "baseline")));
