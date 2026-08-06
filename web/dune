@@ -5,6 +5,9 @@
 
 ; index.html is a plain source file; depending on it here makes dune copy it
 ; next to app.bc.js so the directory can be served as-is.
+; index.html is a plain source file, and three-view.js is built by esbuild from
+; viewer/ rather than by dune; depending on both here makes dune copy them next
+; to app.bc.js so the directory can be served as-is.
 (alias
  (name default)
- (deps index.html app.bc.js))
+ (deps index.html app.bc.js three-view.js))
