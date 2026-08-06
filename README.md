@@ -265,3 +265,29 @@ why the colour baseline honestly shows four tie-offs for a five-colour palette.
 - **The non-greedy solvers in the browser.** They are a second or two natively
   and correspondingly slower in JS; the page offers them but greedy is the
   sensible default there.
+
+## Licence
+
+[GNU Affero General Public License v3.0 or later](LICENSE). Copyright © 2026
+Emre Dayangac.
+
+AGPL rather than MIT for one specific reason: this is a web app. GPL only
+triggers on *distribution*, so someone could take it, modify it, host it as
+their own and never publish a line. AGPL's section 13 closes that — running a
+modified version for others over a network obliges you to offer them its
+source. Which is why the page itself carries a source link; that offer has to
+reach the people using it, not just the people who clone it.
+
+In short, you may use, study, modify and share this, including commercially,
+provided that:
+
+- the copyright notice and licence travel with it,
+- you say what you changed,
+- anything you build on it is released under AGPL-3.0 too,
+- and if you run it as a service, you offer your users the source.
+
+If you want a visible-credit requirement on top, AGPL section 7(b) permits
+adding one without leaving the licence; it is a paragraph in this file rather
+than a different licence.
+
+I am not a lawyer and this is not legal advice.
