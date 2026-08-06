@@ -107,6 +107,19 @@
   figure.wound { min-width: 0; height: 100%; }
   figure.wound .frame { flex: 1; min-height: 0; width: 100%; aspect-ratio: auto; }
 
+  /* the two views of the same winding share the stage */
+  .tab { background: none; border: 0; padding: 0 .6rem 0 0; margin: 0; width: auto;
+         font: inherit; font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+         color: var(--dim); cursor: pointer; font-weight: 400; }
+  .tab:hover { background: none; color: var(--thread); }
+  .tab.on { color: var(--ink); font-weight: 600; }
+  #pane-three { position: relative; }
+  #three-host { position: absolute; inset: 0; }
+  .three-bar { position: absolute; left: .6rem; right: .6rem; bottom: .5rem;
+               display: flex; align-items: center; gap: .6rem; }
+  .three-bar input { flex: 1; }
+  #three-note { font-size: 11px; color: var(--dim); white-space: nowrap; }
+
   .readout { display: flex; flex-direction: column; gap: .55rem; min-height: 0;
              border-left: 1px solid var(--line); padding-left: .9rem; }
   .stat { font-variant-numeric: tabular-nums; }
@@ -211,8 +224,18 @@
       <div class="frame" id="source"></div>
     </figure>
     <figure class="wound">
-      <figcaption>Wound</figcaption>
-      <div class="frame"><canvas id="result" width="660" height="660"></canvas></div>
+      <figcaption>
+        <button type="button" id="tab-flat" class="tab on">Wound</button>
+        <button type="button" id="tab-three" class="tab">In 3D</button>
+      </figcaption>
+      <div class="frame" id="pane-flat"><canvas id="result" width="660" height="660"></canvas></div>
+      <div class="frame hidden" id="pane-three">
+        <div id="three-host"></div>
+        <div class="three-bar">
+          <input type="range" id="three-scrub" min="0" max="1" step="1" value="1">
+          <span id="three-note"></span>
+        </div>
+      </div>
     </figure>
     <aside class="readout">
       <div class="stat headline">
@@ -241,5 +264,6 @@
 </main>
 <canvas id="work" style="display:none"></canvas>
 <script src="app.bc.js"></script>
+<script type="module" src="three-view.js"></script>
 </body>
 </html>
