@@ -86,6 +86,20 @@ async function wind(mode, algorithm) {
     document.getElementById("pins").value = "160";
     report.runs.push(await wind("grayscale"));
     report.runs.push(await wind("colour"));
+    // the 3D view is a separate bundle from a separate language; check it was
+    // handed the winding and actually drew it
+    document.getElementById("tab-three").click();
+    await sleep(1200);
+    const w = window.__stringart;
+    const v = window.__stringartView;
+    report.three = {
+      published: w ? w.a.length : 0,
+      palette: w ? w.palette.length : 0,
+      shown: v ? v.shown() : -1,
+      canvas: document.querySelectorAll("#three-host canvas").length,
+    };
+    document.getElementById("tab-flat").click();
+
     // the baseline preset must put every lever back
     document.getElementById("baseline").click();
     report.baseline = {
