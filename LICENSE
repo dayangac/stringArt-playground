@@ -659,3 +659,42 @@ specific requirements.
 if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
+
+
+-----------------------------------------------------------------------
+
+ADDITIONAL TERMS UNDER SECTION 7 OF THE GNU AFFERO GENERAL PUBLIC
+LICENSE VERSION 3
+
+Copyright (C) 2026 Emre Dayangac.
+
+In accordance with Section 7(b) of the GNU Affero General Public License
+version 3, the following additional term applies to this Program and to
+every covered work based on it:
+
+    You must preserve, in the Appropriate Legal Notices displayed by any
+    work that contains this Program or any part of it, the following
+    attribution:
+
+        String Art -- Copyright (C) 2026 Emre Dayangac
+        https://github.com/dayangac/stringArt-playground
+
+    Where the work has an interactive user interface, this attribution
+    must be visible to a user of that interface: legible, in the
+    interface itself or no more than one link away from its initial
+    view, and without requiring the user to read source code, open a
+    developer console, or inspect network traffic to find it.
+
+    You may place your own name and notices alongside this attribution.
+    You may not remove it, obscure it, shrink it to illegibility, or
+    replace it with your own.
+
+Section 7(b) expressly permits a term of this kind. It is therefore not
+a "further restriction" within the meaning of Section 10, and a
+downstream recipient may not remove it.
+
+Everything else about this Program is governed by the GNU Affero General
+Public License version 3 or later, the full text of which appears above.
+
+There is NO WARRANTY for this Program, to the extent permitted by
+applicable law. See Sections 15 and 16 of the License.

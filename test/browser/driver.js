@@ -86,6 +86,17 @@ async function wind(mode, algorithm) {
     document.getElementById("pins").value = "160";
     report.runs.push(await wind("grayscale"));
     report.runs.push(await wind("colour"));
+    // The section 7(b) term in LICENSE requires this attribution to stay
+    // visible in the interface. If it goes missing, the licence condition the
+    // project ships under is not being met.
+    const notice = document.querySelector("header .notice");
+    const nr = notice ? notice.getBoundingClientRect() : null;
+    report.notice = {
+      text: notice ? notice.textContent.replace(/\s+/g, " ").trim() : "",
+      visible: !!nr && nr.width > 40 && nr.height > 6 && nr.top >= 0,
+      source: !!document.querySelector('header .notice a[href*="stringArt-playground"]'),
+    };
+
     // the 3D view is a separate bundle from a separate language; check it was
     // handed the winding and actually drew it
     document.getElementById("tab-three").click();

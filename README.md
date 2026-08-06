@@ -286,8 +286,13 @@ provided that:
 - anything you build on it is released under AGPL-3.0 too,
 - and if you run it as a service, you offer your users the source.
 
-If you want a visible-credit requirement on top, AGPL section 7(b) permits
-adding one without leaving the licence; it is a paragraph in this file rather
-than a different licence.
+There is also an **additional term under section 7(b)**, at the end of
+`LICENSE`: the attribution shown in the interface must stay visible in anything
+built on this. Legible, in the interface or one link from it, not buried in the
+source. You may add your own name beside it; you may not remove it.
+
+Section 7(b) exists precisely for this, so the term is not a "further
+restriction" under section 10 and cannot be stripped downstream. It is why the
+page header carries a copyright line rather than only a source link.
 
 I am not a lawyer and this is not legal advice.

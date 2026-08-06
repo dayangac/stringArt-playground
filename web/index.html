@@ -29,9 +29,11 @@
   header { display: flex; align-items: baseline; gap: .8rem; flex: none; }
   h1 { font-size: 1.15rem; letter-spacing: -.02em; margin: 0; }
   header p { margin: 0; color: var(--dim); font-size: 12px; }
-  header .src { margin-left: auto; font-size: 11px; color: var(--dim); text-decoration: none;
-                border-bottom: 1px solid var(--line); }
-  header .src:hover { color: var(--thread); border-color: var(--thread); }
+  header .notice { margin-left: auto; font-size: 11px; color: var(--dim); white-space: nowrap; }
+  header .notice b { font-weight: 600; color: var(--ink); }
+  header .notice a { color: var(--dim); text-decoration: none;
+                     border-bottom: 1px solid var(--line); }
+  header .notice a:hover { color: var(--thread); border-color: var(--thread); }
 
   main {
     flex: 1;
@@ -160,9 +162,16 @@
 <header>
   <h1>String Art</h1>
   <p>One continuous thread between pins. Opaque thread; the palette is clustered from your image.</p>
-  <!-- AGPL section 13: anyone using this over a network is entitled to its
-       source, so the offer has to be on the page itself, not only in the repo. -->
-  <a class="src" href="https://github.com/dayangac/stringArt-playground">source (AGPL-3.0)</a>
+  <!-- The Appropriate Legal Notices, in the sense the AGPL means. Section 13
+       obliges the source offer to reach whoever uses this over a network, and
+       the section 7(b) term in LICENSE requires this attribution to stay
+       visible in any interface built on it. Do not remove it. -->
+  <p class="notice">
+    String Art © 2026 <b>Emre Dayangac</b> ·
+    <a href="https://github.com/dayangac/stringArt-playground/blob/master/LICENSE">AGPL-3.0</a>,
+    no warranty ·
+    <a href="https://github.com/dayangac/stringArt-playground">source</a>
+  </p>
 </header>
 
 <main>

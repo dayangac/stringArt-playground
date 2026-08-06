@@ -37,6 +37,14 @@ def check(report):
     problems = []
     if not report.get("ok"):
         problems.append("driver failed: %s" % report.get("error"))
+    n = report.get("notice") or {}
+    if "Emre Dayangac" not in n.get("text", ""):
+        problems.append("the required attribution is not in the interface: %r" % n.get("text"))
+    if not n.get("visible"):
+        problems.append("the attribution is present but not visible")
+    if not n.get("source"):
+        problems.append("no source link in the attribution (AGPL section 13)")
+
     three = report.get("three") or {}
     if three.get("canvas") != 1:
         problems.append("the 3D view made %s WebGL canvases" % three.get("canvas"))
@@ -138,4 +146,5 @@ print("  layout    %sx%s of content in a %sx%s viewport"
          lay.get("innerWidth"), lay.get("innerHeight")))
 t3 = report.get("three") or {}
 print("  3D        %s strands drawn, %s colours" % (t3.get("shown"), t3.get("palette")))
+print("  notice    %r" % ((report.get("notice") or {}).get("text", "")))
 print("browser test passed")
