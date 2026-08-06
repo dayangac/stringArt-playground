@@ -37,6 +37,15 @@ def check(report):
     problems = []
     if not report.get("ok"):
         problems.append("driver failed: %s" % report.get("error"))
+    three = report.get("three") or {}
+    if three.get("canvas") != 1:
+        problems.append("the 3D view made %s WebGL canvases" % three.get("canvas"))
+    if three.get("published", 0) < 50:
+        problems.append("the 3D view was handed %s chords" % three.get("published"))
+    if three.get("shown") != three.get("published"):
+        problems.append("3D drew %s of %s strands" % (three.get("shown"), three.get("published")))
+    if three.get("palette", 0) < 1:
+        problems.append("the 3D view got no palette")
     board = report.get("boardBeforeWinding") or {}
     if board.get("w", 0) < 100 or board.get("h", 0) < 100:
         problems.append("the board is not on screen before winding: %s" % board)
@@ -127,4 +136,6 @@ lay = report.get("layout") or {}
 print("  layout    %sx%s of content in a %sx%s viewport"
       % (lay.get("scrollWidth"), lay.get("scrollHeight"),
          lay.get("innerWidth"), lay.get("innerHeight")))
+t3 = report.get("three") or {}
+print("  3D        %s strands drawn, %s colours" % (t3.get("shown"), t3.get("palette")))
 print("browser test passed")
