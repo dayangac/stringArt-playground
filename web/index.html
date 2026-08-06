@@ -64,6 +64,11 @@
   }
   input[type=color] { width: 100%; height: 28px; padding: 1px; border: 1px solid var(--line);
                       border-radius: 5px; background: #fff; }
+  /* The solver's own knobs are a different kind of thing from the global
+     sliders above them, and were being lost among identical grey labels. */
+  label.section { border-top: 1px solid var(--line); padding-top: .5rem;
+                  margin-top: .15rem; color: var(--thread); font-weight: 600; }
+  #algo-params { display: flex; flex-direction: column; gap: .5rem; }
   .check { display: flex; justify-content: flex-start; align-items: center; gap: .4rem;
            font-size: 12px; color: var(--ink); text-transform: none; letter-spacing: 0;
            margin: 0; }
