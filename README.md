@@ -31,6 +31,27 @@ dune exec bin/bench.exe -- input.ppm            # what each thread-saving lever 
 PPM keeps the CLI free of an image codec dependency; the web app decodes
 whatever the browser can open.
 
+## The 3D view
+
+The flat render answers *what will it look like*. The **In 3D** tab answers
+*what is actually there*: every chord as its own strand at its own height, in
+winding order, so the pile is visible. That pile is the reason the model is
+what it is — opaque thread does not commute, and here you can see why: the
+strands laid last are the ones on top. The scrubber underneath replays the
+winding one chord at a time.
+
+That part is TypeScript and three.js, because OCaml has no 3D binding worth
+depending on. It lives in `viewer/` and bundles to `web/three-view.js`:
+
+```sh
+cd viewer && npm install && npm run build   # or: npm run watch
+```
+
+The bundle is committed, so `dune build @default` and a static server are still
+all you need — you only touch npm if you change the viewer. All the chords go
+into one `LineSegments` buffer, so a few thousand strands cost one draw call
+and the scrubber is a draw range rather than a rebuild.
+
 ## Tests
 
 ```sh
@@ -78,6 +99,7 @@ CMY only combines correctly when the layers are transparent.
 | `lib/sequence.ml` | continuity repair: a chord set back into a winding |
 | `lib/wind.ml` | picks the solver and runs solve, prune, sequence |
 | `lib/svg.ml`, `lib/ppm.ml` | exports |
+| `viewer/src/three-view.ts` | the 3D view, in TypeScript |
 
 Two consequences worth knowing:
 
