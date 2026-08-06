@@ -155,6 +155,7 @@ let show_algorithm () =
      just has a gap in it and nothing suggests other solvers bring knobs. *)
   let heading =
     El.label
+      ~at:[ At.class' (Jstr.v "section") ]
       [ El.txt'
           (Wind.name (current_algorithm ())
           ^ (if made = [] then " — no settings" else " settings")) ]
